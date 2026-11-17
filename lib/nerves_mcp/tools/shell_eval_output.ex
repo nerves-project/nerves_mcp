@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Tools.ShellEvalOutput do
   @moduledoc """
   Run a raw shell command on the connected device, capturing stdout, stderr,

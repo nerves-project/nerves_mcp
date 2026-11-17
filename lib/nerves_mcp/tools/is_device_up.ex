@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Tools.IsDeviceUp do
   @moduledoc """
   Check if a connected Nerves device is up and responsive.

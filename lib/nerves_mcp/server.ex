@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Server do
   @moduledoc """
   MCP Server for interacting with Nerves devices.

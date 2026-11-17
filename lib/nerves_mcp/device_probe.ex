@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.DeviceProbe do
   @moduledoc """
   Detects what is on the other end of the device connection and decides which

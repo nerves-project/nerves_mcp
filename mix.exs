@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.MixProject do
   use Mix.Project
 
@@ -36,6 +40,16 @@ defmodule NervesMCP.MixProject do
   def package do
     [
       name: :nerves_mcp,
+      files: [
+        "lib",
+        "LICENSES",
+        ".formatter.exs",
+        "mix.exs",
+        "README.md",
+        "LICENSE.md",
+        "CHANGELOG.md",
+        "REUSE.toml"
+      ],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/TODO/nerves_mcp"}
     ]

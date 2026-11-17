@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Tools.DeviceStatus do
   @moduledoc """
   Report what the device probe currently detects on the other end of the

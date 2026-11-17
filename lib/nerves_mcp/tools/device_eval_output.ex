@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Tools.DeviceEvalOutput do
   @moduledoc """
   Evaluate Elixir code on a connected Nerves device and capture IO output.

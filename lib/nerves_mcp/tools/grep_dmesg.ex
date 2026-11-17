@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.Tools.GrepDmesg do
   @moduledoc """
   Grep the kernel ring buffer (`dmesg`) on the connected device.

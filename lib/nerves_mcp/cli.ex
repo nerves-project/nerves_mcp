@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule NervesMCP.CLI do
   @moduledoc """
   CLI argument parsing and connection setup for NervesMCP.
