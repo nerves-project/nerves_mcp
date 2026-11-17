@@ -36,18 +36,21 @@ Build the escript and run it directly:
 
 ```bash
 mix escript.build
-./nerves_mcp /dev/ttyUSB0
 ./nerves_mcp nerves.local --user exnvr --port 4000
 ```
+
+The escript only supports SSH. The serial driver cannot be packed into an escript, so use the Mix task for serial devices.
 
 ### Options
 
 | Flag           | Description                        | Default   |
 |----------------|------------------------------------|-----------|
 | `--port`       | MCP server HTTP port               | `13000`   |
+| `--ip`         | Address to listen on, or `any`     | loopback  |
 | `--speed`      | Serial baud rate                   | `115200`  |
 | `--user`       | SSH username                       | `root`    |
 | `--ssh-port`   | SSH port                           | `22`      |
+| `--pass`       | SSH password (needs `sshpass`)     |           |
 | `--serial`     | Force serial mode (pass device)    |           |
 | `--ssh`        | Force SSH mode (pass host)         |           |
 
@@ -105,6 +108,12 @@ http://localhost:13000/mcp
 
 Or whatever port you specified with `--port`.
 
+### Security
+
+Whoever can reach the MCP port can run code on the device, and there is no authentication. The server therefore only listens on the loopback interface unless you pass `--ip`, set `config :nerves_mcp, :ip`, or give `:ip` to `NervesMCP.start_server/2`. Only do that on a network you trust. Requests from web pages are refused unless the page is served from the same machine.
+
+SSH connections do not check the device's host key, since Nerves devices get a new one with each fresh firmware.
+
 ## Use as a library
 
 An application can run one MCP server per device, each on its own port, without any `:nerves_mcp` configuration:
@@ -112,8 +121,7 @@ An application can run one MCP server per device, each on its own port, without 
 ```elixir
 {:ok, server} =
   NervesMCP.start_server("nerves-1234.local",
-    connection: [type: :ssh, host: "nerves-1234.local", user: "root"],
-    ip: :loopback
+    connection: [type: :ssh, host: "nerves-1234.local", user: "root"]
   )
 
 server.url
@@ -133,6 +141,20 @@ NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_l
 
 ## MCP Tools
 
+The tools on offer follow what is on the other end of the connection, which is probed while the server is idle. A Nerves device gets all of the Elixir tools, a device that runs Elixir without Nerves gets `device_eval` and `device_eval_output`, and a device that answers without running Elixir gets `shell_eval` and `shell_eval_output`. The status and waiting tools are always there. Requests to a device run one at a time, in the order they arrive.
+
+### device_status
+
+Reports what was detected on the other end and which tools that leads to. Pass `refresh` to probe again right away.
+
+### is_device_up
+
+Waits for the device to answer with a firmware UUID, for instance after a reboot.
+
+### is_device_updated_to
+
+Waits for the device to come up, then checks that it runs the firmware with the expected UUID.
+
 ### device_eval
 
 Evaluates Elixir code on the device and returns the expression's return value.
@@ -148,6 +170,14 @@ Filters the device's `RingLogger` buffer by a substring or regex pattern. Option
 ### grep_dmesg
 
 Filters the device's `dmesg` (kernel ring buffer) by a substring or regex pattern. Optional `tail` returns only the last N matches.
+
+### shell_eval
+
+Runs a shell command and returns its output. Offered when the device answers but does not run Elixir.
+
+### shell_eval_output
+
+Runs a shell command and returns stdout, stderr and the exit code.
 
 ## Interactive Console
 
