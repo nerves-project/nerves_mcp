@@ -72,7 +72,7 @@ defmodule NervesMCP.MixProject do
       {:emcp, "~> 0.3"},
       {:bandit, "~> 1.0"},
       {:circuits_uart, "~> 1.0"},
-      {:circular_buffer, "~> 0.4"},
+      {:circular_buffer, "~> 0.4 or ~> 1.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:ex_doc, "~> 0.31", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
