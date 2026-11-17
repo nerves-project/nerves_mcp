@@ -3,26 +3,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.DeviceStatus do
-  @moduledoc """
-  Report what the device probe currently detects on the other end of the
-  connection, and therefore which tools are being offered.
-
-  Always available. Pass `refresh: true` to run a fresh probe now instead of
-  reading the last cached result.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
   @impl EMCP.Tool
-  def name, do: "device_status"
+  def name(), do: "device_status"
 
   @impl EMCP.Tool
-  def description,
+  def description(),
     do:
       "Report the detected device state (nerves/elixir/shell/down) that decides which tools are offered"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -62,8 +56,7 @@ defmodule NervesMCP.Tools.DeviceStatus do
     do: "device_eval, device_eval_output + is_device_up, is_device_updated_to, device_status"
 
   defp offered(:shell),
-    do:
-      "device_eval (shell), device_eval_output (shell) + is_device_up, is_device_updated_to, device_status"
+    do: "shell_eval, shell_eval_output + is_device_up, is_device_updated_to, device_status"
 
   defp offered(_), do: "is_device_up, is_device_updated_to, device_status"
 

@@ -3,30 +3,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
-  @moduledoc """
-  Check if a connected Nerves device has been updated to a specific firmware version.
-
-  Repeatedly attempts to read the device's firmware UUID via
-  `Nerves.Runtime.KV.get_active("nerves_fw_uuid")` and compares it to the
-  expected UUID. Returns success if the UUID matches, an error if the device
-  came up with a different UUID (reverted), or an error if the total timeout
-  is exceeded.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
-  @eval_timeout 5_000
-  @retry_pause 2_000
+  alias NervesMCP.Connection
 
   @impl EMCP.Tool
-  def name, do: "is_device_updated_to"
+  def name(), do: "is_device_updated_to"
 
   @impl EMCP.Tool
-  def description,
-    do: "Check if the connected Nerves device has been updated to a specific firmware version"
+  def description(),
+    do:
+      "Wait for the connected Nerves device to come up and check that it runs the firmware with the expected UUID"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -45,54 +37,20 @@ defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
 
   @impl EMCP.Tool
   def call(_conn, args) do
-    expected_uuid = args["expected_uuid"]
-    total_timeout = args["timeout"] || 60_000
-    deadline = System.monotonic_time(:millisecond) + total_timeout
-
     id = NervesMCP.Instance.current()
+    expected = args["expected_uuid"]
 
-    case poll_device(id, expected_uuid, deadline) do
-      :ok ->
-        EMCP.Tool.response([
-          %{
-            "type" => "text",
-            "text" => "Device is up and running expected firmware UUID: #{expected_uuid}"
-          }
-        ])
+    case Connection.await_firmware_uuid(id, args["timeout"] || 60_000) do
+      {:ok, ^expected} ->
+        NervesMCP.Tools.respond({:ok, "Device is up and running firmware UUID #{expected}"})
+
+      {:ok, actual} ->
+        EMCP.Tool.error(
+          "Device came up with firmware UUID #{actual}, expected #{expected}. The firmware may have reverted."
+        )
 
       {:error, reason} ->
         EMCP.Tool.error(reason)
     end
-  end
-
-  defp poll_device(id, expected_uuid, deadline) do
-    remaining = deadline - System.monotonic_time(:millisecond)
-
-    if remaining <= 0 do
-      {:error, "Timed out waiting for device to come up with expected firmware UUID"}
-    else
-      eval_timeout = min(@eval_timeout, remaining)
-
-      case try_eval(id, eval_timeout) do
-        {:ok, raw_uuid} when raw_uuid != "" ->
-          actual_uuid = raw_uuid |> String.trim() |> String.trim(~s|"|)
-
-          if actual_uuid == expected_uuid do
-            :ok
-          else
-            {:error,
-             "Device came up with firmware UUID #{actual_uuid}, expected #{expected_uuid} — firmware may have reverted"}
-          end
-
-        _ ->
-          NervesMCP.Connection.reconnect(id)
-          Process.sleep(min(@retry_pause, max(0, deadline - System.monotonic_time(:millisecond))))
-          poll_device(id, expected_uuid, deadline)
-      end
-    end
-  end
-
-  defp try_eval(id, timeout) do
-    NervesMCP.Connection.eval(id, ~s|Nerves.Runtime.KV.get_active("nerves_fw_uuid")|, timeout)
   end
 end

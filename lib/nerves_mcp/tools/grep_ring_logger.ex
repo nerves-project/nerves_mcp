@@ -3,25 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.GrepRingLogger do
-  @moduledoc """
-  Grep the device's RingLogger buffer.
-
-  Fetches log entries from `RingLogger.get/1` on the connected device,
-  formats each entry as `[level] message`, and returns lines matching
-  the given pattern. Optionally limits the output to the last N matches.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
   @impl EMCP.Tool
-  def name, do: "grep_ring_logger"
+  def name(), do: "grep_ring_logger"
 
   @impl EMCP.Tool
-  def description,
+  def description(),
     do: "Filter the connected Nerves device's RingLogger buffer by a substring or regex pattern"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -55,12 +49,9 @@ defmodule NervesMCP.Tools.GrepRingLogger do
 
     code = build_code(pattern, regex?, tail)
 
-    result = NervesMCP.Connection.eval_output(NervesMCP.Instance.current(), code, timeout)
-
-    case result do
-      {:ok, output} -> EMCP.Tool.response([%{"type" => "text", "text" => output}])
-      {:error, reason} -> EMCP.Tool.error(reason)
-    end
+    NervesMCP.Instance.current()
+    |> NervesMCP.Connection.eval_output(code, timeout)
+    |> NervesMCP.Tools.respond()
   end
 
   defp build_code(pattern, regex?, tail) do
@@ -79,6 +70,17 @@ defmodule NervesMCP.Tools.GrepRingLogger do
         else
           fn line -> String.contains?(line, pattern) end
         end
+
+      format = fn level, msg ->
+        text =
+          try do
+            IO.iodata_to_binary(msg)
+          rescue
+            _ -> inspect(msg)
+          end
+
+        "[" <> to_string(level) <> "] " <> text
+      end
 
       entries =
         try do
@@ -99,18 +101,9 @@ defmodule NervesMCP.Tools.GrepRingLogger do
           lines =
             list
             |> Enum.map(fn
-              {level, {_logger, msg, _ts, _meta}} ->
-                formatted =
-                  try do
-                    IO.iodata_to_binary(msg)
-                  rescue
-                    _ -> inspect(msg)
-                  end
-
-                "[" <> to_string(level) <> "] " <> formatted
-
-              other ->
-                inspect(other)
+              %{level: level, message: msg} -> format.(level, msg)
+              {level, {_logger, msg, _ts, _meta}} -> format.(level, msg)
+              other -> inspect(other)
             end)
             |> Enum.filter(matcher)
 

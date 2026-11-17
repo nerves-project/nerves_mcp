@@ -3,25 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.GrepDmesg do
-  @moduledoc """
-  Grep the kernel ring buffer (`dmesg`) on the connected device.
-
-  Runs `dmesg` via `:os.cmd/1` on the device, splits the output into lines,
-  and returns lines matching the given pattern. Optionally limits the
-  output to the last N matches.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
   @impl EMCP.Tool
-  def name, do: "grep_dmesg"
+  def name(), do: "grep_dmesg"
 
   @impl EMCP.Tool
-  def description,
+  def description(),
     do: "Filter the connected Nerves device's `dmesg` output by a substring or regex pattern"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -55,12 +49,9 @@ defmodule NervesMCP.Tools.GrepDmesg do
 
     code = build_code(pattern, regex?, tail)
 
-    result = NervesMCP.Connection.eval_output(NervesMCP.Instance.current(), code, timeout)
-
-    case result do
-      {:ok, output} -> EMCP.Tool.response([%{"type" => "text", "text" => output}])
-      {:error, reason} -> EMCP.Tool.error(reason)
-    end
+    NervesMCP.Instance.current()
+    |> NervesMCP.Connection.eval_output(code, timeout)
+    |> NervesMCP.Tools.respond()
   end
 
   defp build_code(pattern, regex?, tail) do

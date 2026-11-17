@@ -3,26 +3,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.DeviceEvalOutput do
-  @moduledoc """
-  Evaluate Elixir code on a connected Nerves device and capture IO output.
-
-  Unlike `device_eval` which returns the expression's return value,
-  this tool captures what the code prints to stdout (IO.puts, IO.write, etc.)
-  and returns both the output and the result.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
-  @impl EMCP.Tool
-  def name, do: "device_eval_output"
+  alias NervesMCP.Connection
+  alias NervesMCP.Tools
 
   @impl EMCP.Tool
-  def description,
+  def name(), do: "device_eval_output"
+
+  @impl EMCP.Tool
+  def description(),
     do:
-      "Evaluate Elixir code on the connected Nerves device and capture IO output along with the result"
+      "Evaluate Elixir code on the connected Nerves device and return what it printed along with the result"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -35,17 +32,7 @@ defmodule NervesMCP.Tools.DeviceEvalOutput do
 
   @impl EMCP.Tool
   def call(_conn, args) do
-    code = args["code"]
-    timeout = args["timeout"] || 15000
-
-    result = NervesMCP.Connection.eval_output(NervesMCP.Instance.current(), code, timeout)
-
-    case result do
-      {:ok, output} ->
-        EMCP.Tool.response([%{"type" => "text", "text" => output}])
-
-      {:error, reason} ->
-        EMCP.Tool.error(reason)
-    end
+    id = NervesMCP.Instance.current()
+    Tools.respond(Connection.eval_output(id, args["code"], args["timeout"] || 15_000))
   end
 end

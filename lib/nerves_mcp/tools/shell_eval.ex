@@ -3,27 +3,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.ShellEval do
-  @moduledoc """
-  Run a raw shell command on the connected device.
-
-  Exposed (under the `device_eval` name) when the device probe detects a serial
-  connection that responds but does not run Elixir. Mirrors the density
-  `device_mcp` behaviour: the command is wrapped in `echo` markers and the
-  output between them is returned.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
-  @impl EMCP.Tool
-  def name, do: "device_eval"
+  alias NervesMCP.Connection
+  alias NervesMCP.Tools
 
   @impl EMCP.Tool
-  def description,
+  def name(), do: "shell_eval"
+
+  @impl EMCP.Tool
+  def description(),
     do:
-      "Run a raw shell command on the connected device and return the output (device is not running Elixir)"
+      "Run a shell command on the connected device and return its output (offered when the device is not running Elixir)"
 
   @impl EMCP.Tool
-  def input_schema do
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -36,14 +32,7 @@ defmodule NervesMCP.Tools.ShellEval do
 
   @impl EMCP.Tool
   def call(_conn, args) do
-    command = args["command"]
-    timeout = args["timeout"] || 15000
-
-    result = NervesMCP.Connection.shell_eval(NervesMCP.Instance.current(), command, timeout)
-
-    case result do
-      {:ok, output} -> EMCP.Tool.response([%{"type" => "text", "text" => output}])
-      {:error, reason} -> EMCP.Tool.error(reason)
-    end
+    id = NervesMCP.Instance.current()
+    Tools.respond(Connection.shell_eval(id, args["command"], args["timeout"] || 15_000))
   end
 end

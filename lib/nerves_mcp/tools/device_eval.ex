@@ -3,26 +3,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule NervesMCP.Tools.DeviceEval do
-  @moduledoc """
-  Evaluate Elixir code on a connected Nerves device.
-
-  The device must be connected via serial (UART) or SSH.
-  Configure the connection in the application config.
-
-  Returns the result of the evaluated expression as inspected output.
-  """
+  @moduledoc false
 
   @behaviour EMCP.Tool
 
-  @impl EMCP.Tool
-  def name, do: "device_eval"
+  alias NervesMCP.Connection
+  alias NervesMCP.Tools
 
   @impl EMCP.Tool
-  def description,
-    do: "Evaluate Elixir code on the connected Nerves device and return the expression result"
+  def name(), do: "device_eval"
 
   @impl EMCP.Tool
-  def input_schema do
+  def description(),
+    do: "Evaluate Elixir code on the connected Nerves device and return the inspected result"
+
+  @impl EMCP.Tool
+  def input_schema() do
     %{
       type: :object,
       properties: %{
@@ -35,17 +31,7 @@ defmodule NervesMCP.Tools.DeviceEval do
 
   @impl EMCP.Tool
   def call(_conn, args) do
-    code = args["code"]
-    timeout = args["timeout"] || 15000
-
-    result = NervesMCP.Connection.eval(NervesMCP.Instance.current(), code, timeout)
-
-    case result do
-      {:ok, output} ->
-        EMCP.Tool.response([%{"type" => "text", "text" => output}])
-
-      {:error, reason} ->
-        EMCP.Tool.error(reason)
-    end
+    id = NervesMCP.Instance.current()
+    Tools.respond(Connection.eval(id, args["code"], args["timeout"] || 15_000))
   end
 end

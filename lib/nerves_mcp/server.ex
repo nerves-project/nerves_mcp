@@ -35,15 +35,16 @@ defmodule NervesMCP.Server do
 
     * A confirmed Nerves device offers `device_eval`/`device_eval_output`
       (Elixir), plus `grep_ring_logger` and `grep_dmesg`.
-    * A non-Nerves serial that still responds offers `device_eval`/
-      `device_eval_output` as raw shell commands.
+    * A device that responds without running Elixir offers `shell_eval`/
+      `shell_eval_output`, which run shell commands.
     * When the device is down, only the wait/status tools are offered.
 
   Use `is_device_up` / `is_device_updated_to` to wait for a device to come up
   after a reboot or firmware update.
   """
 
-  def server do
+  @spec server() :: struct()
+  def server() do
     id = NervesMCP.Instance.current()
     NervesMCP.DeviceProbe.touch(id)
 
@@ -55,7 +56,7 @@ defmodule NervesMCP.Server do
     )
   end
 
-  defp version, do: to_string(Application.spec(:nerves_mcp, :vsn))
+  defp version(), do: to_string(Application.spec(:nerves_mcp, :vsn))
 
   defp tools_for(:nerves) do
     @base ++ [Tools.DeviceEval, Tools.DeviceEvalOutput, Tools.GrepRingLogger, Tools.GrepDmesg]
