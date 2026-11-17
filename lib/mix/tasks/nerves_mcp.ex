@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Mix.Tasks.NervesMcp do
+  @shortdoc "Start NervesMCP server connected to a device"
+
   @moduledoc """
   Starts the NervesMCP server connected to a Nerves device.
 
@@ -18,11 +20,10 @@ defmodule Mix.Tasks.NervesMcp do
 
   use Mix.Task
 
-  @shortdoc "Start NervesMCP server connected to a device"
-
   @impl Mix.Task
   def run(args) do
-    Mix.Task.run("app.start")
+    Mix.Task.run("app.config")
+    {:ok, _apps} = Application.ensure_all_started(:nerves_mcp)
     NervesMCP.CLI.run(args)
     NervesMCP.CLI.repl()
   end
