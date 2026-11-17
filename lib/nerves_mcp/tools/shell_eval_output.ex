@@ -11,7 +11,7 @@ defmodule NervesMCP.Tools.ShellEvalOutput do
   alias NervesMCP.Tools
 
   @impl EMCP.Tool
-  def name(), do: "shell_eval_output"
+  def name(), do: "device_shell_eval_output"
 
   @impl EMCP.Tool
   def description(),

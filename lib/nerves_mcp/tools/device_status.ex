@@ -56,7 +56,8 @@ defmodule NervesMCP.Tools.DeviceStatus do
     do: "device_eval, device_eval_output + is_device_up, is_device_updated_to, device_status"
 
   defp offered(:shell),
-    do: "shell_eval, shell_eval_output + is_device_up, is_device_updated_to, device_status"
+    do:
+      "device_shell_eval, device_shell_eval_output + is_device_up, is_device_updated_to, device_status"
 
   defp offered(_), do: "is_device_up, is_device_updated_to, device_status"
 

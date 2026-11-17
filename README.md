@@ -141,7 +141,7 @@ NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_l
 
 ## MCP Tools
 
-The tools on offer follow what is on the other end of the connection, which is probed while the server is idle. A Nerves device gets all of the Elixir tools, a device that runs Elixir without Nerves gets `device_eval` and `device_eval_output`, and a device that answers without running Elixir gets `shell_eval` and `shell_eval_output`. The status and waiting tools are always there. Requests to a device run one at a time, in the order they arrive.
+The tools on offer follow what is on the other end of the connection, which is probed while the server is idle. A Nerves device gets all of the Elixir tools, a device that runs Elixir without Nerves gets `device_eval` and `device_eval_output`, and a device that answers without running Elixir gets `device_shell_eval` and `device_shell_eval_output`. The status and waiting tools are always there. Requests to a device run one at a time, in the order they arrive.
 
 ### device_status
 
@@ -171,11 +171,11 @@ Filters the device's `RingLogger` buffer by a substring or regex pattern. Option
 
 Filters the device's `dmesg` (kernel ring buffer) by a substring or regex pattern. Optional `tail` returns only the last N matches.
 
-### shell_eval
+### device_shell_eval
 
 Runs a shell command and returns its output. Offered when the device answers but does not run Elixir.
 
-### shell_eval_output
+### device_shell_eval_output
 
 Runs a shell command and returns stdout, stderr and the exit code.
 
