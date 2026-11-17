@@ -8,9 +8,10 @@ defmodule NervesMCP do
 
   ## Running the Server
 
-  Start with `mix run --no-halt` or `iex -S mix`.
+  Start with `mix nerves_mcp`, or with `iex -S mix` when a connection is
+  configured.
 
-  The MCP server will be available at: `http://localhost:8080/mcp`
+  The MCP server will be available at: `http://localhost:13000/mcp`
 
   ## Configuration
 
@@ -18,7 +19,12 @@ defmodule NervesMCP do
 
   ### HTTP Server Port
 
-      config :nerves_mcp, :port, 8080
+      config :nerves_mcp, :port, 13000
+
+  The server only accepts connections from this machine. To listen on every
+  interface, on a network you trust:
+
+      config :nerves_mcp, :ip, :any
 
   ### UART (Serial) Connection
 
@@ -74,7 +80,7 @@ defmodule NervesMCP do
 
   @doc "The port the first server listens on unless told otherwise."
   @spec default_port() :: :inet.port_number()
-  def default_port, do: @default_port
+  def default_port(), do: @default_port
 
   @doc """
   Starts an MCP server for one device.
@@ -93,15 +99,17 @@ defmodule NervesMCP do
       #{@default_port}..#{@default_port + @port_span - 1}. To keep a device on
       the port it had last time, put that port first.
     * `:ip` - the address to listen on, as Bandit's `:ip` option. Defaults to
-      all interfaces; pass `:loopback` to accept local clients only.
+      `:loopback`, which accepts local clients only. Anyone who can reach the
+      port can run code on the device, so only pass `:any` on a trusted network.
 
-  Returns `{:error, :already_started}` if a server with this id is running and
-  `{:error, :no_free_port}` if none of the ports could be used.
+  Returns `{:error, :already_started}` if a server with this id is running,
+  `{:error, :no_free_port}` if none of the ports could be used, and
+  `{:error, {:invalid_connection, message}}` if the connection cannot work.
   """
   @spec start_server(id(), keyword()) :: {:ok, server()} | {:error, term()}
   def start_server(id, opts) do
     connection = Keyword.fetch!(opts, :connection)
-    ip = Keyword.take(opts, [:ip])
+    ip = [ip: Keyword.get(opts, :ip, :loopback)]
 
     ports =
       case Keyword.get(opts, :port, @default_port..(@default_port + @port_span - 1)) do
@@ -109,29 +117,42 @@ defmodule NervesMCP do
         ports -> ports
       end
 
-    if server(id) do
-      {:error, :already_started}
-    else
-      start_on_first_free(id, connection, ip, Enum.to_list(ports), :no_free_port)
+    case {server(id), Connection.validate(connection)} do
+      {nil, :ok} -> start_on_first_free(id, connection, ip, Enum.to_list(ports))
+      {nil, {:error, message}} -> {:error, {:invalid_connection, message}}
+      {_server, _valid} -> {:error, :already_started}
     end
   end
 
-  defp start_on_first_free(_id, _connection, _ip, [], last_error), do: {:error, last_error}
+  defp start_on_first_free(_id, _connection, _ip, []), do: {:error, :no_free_port}
 
-  defp start_on_first_free(id, connection, ip, [port | rest], last_error) do
-    if port_free?(port, ip) do
-      spec = {Instance, [id: id, connection: connection, port: port] ++ ip}
-
-      case DynamicSupervisor.start_child(NervesMCP.InstanceSupervisor, spec) do
-        {:ok, _pid} -> {:ok, server(id)}
-        {:error, {:already_started, _pid}} -> {:error, :already_started}
-        # Something else took the port between the check and the bind.
-        {:error, reason} -> start_on_first_free(id, connection, ip, rest, reason)
-      end
-    else
-      start_on_first_free(id, connection, ip, rest, last_error)
+  defp start_on_first_free(id, connection, ip, [port | rest]) do
+    case try_port(id, connection, ip, port) do
+      :taken -> start_on_first_free(id, connection, ip, rest)
+      result -> result
     end
   end
+
+  defp try_port(id, connection, ip, port) do
+    spec = {Instance, [id: id, connection: connection, port: port] ++ ip}
+
+    with true <- port_free?(port, ip),
+         {:ok, _pid} <- DynamicSupervisor.start_child(NervesMCP.InstanceSupervisor, spec) do
+      {:ok, server(id)}
+    else
+      false -> :taken
+      {:error, {:already_started, _pid}} -> {:error, :already_started}
+      # Something else may have taken the port between the check and the bind.
+      {:error, reason} -> if address_in_use?(reason), do: :taken, else: {:error, reason}
+    end
+  end
+
+  defp address_in_use?(:eaddrinuse), do: true
+
+  defp address_in_use?(reason) when is_tuple(reason),
+    do: reason |> Tuple.to_list() |> Enum.any?(&address_in_use?/1)
+
+  defp address_in_use?(_reason), do: false
 
   defp port_free?(port, ip) do
     case :gen_tcp.listen(port, ip) do
@@ -164,7 +185,7 @@ defmodule NervesMCP do
 
   @doc "Describes every running server."
   @spec servers() :: [server()]
-  def servers, do: Enum.map(Instance.all(), &describe/1)
+  def servers(), do: Enum.map(Instance.all(), &describe/1)
 
   defp describe(info), do: Map.put(info, :url, "http://localhost:#{info.port}/mcp")
 
@@ -174,8 +195,8 @@ defmodule NervesMCP do
   Displays all incoming data from the device and allows you to send
   commands directly. Type `#quit` to exit the console and return to IEx.
   """
+  @spec console(id()) :: :ok
   def console(id \\ :default) do
-    # Start a process to receive and display console data
     receiver =
       spawn_link(fn ->
         monitor_and_attach(id)
@@ -188,7 +209,6 @@ defmodule NervesMCP do
     try do
       input_loop(id)
     after
-      # Clean up: stop receiver and detach console
       send(receiver, :stop)
       Connection.detach_console(id)
     end
@@ -204,14 +224,10 @@ defmodule NervesMCP do
   All device output that arrives when no console is attached is stored
   in a circular buffer. Use this to view what you might have missed.
   """
+  @spec history(id()) :: :ok
   def history(id \\ :default) do
     IO.puts(NervesMCP.History.get(id))
     :ok
-  end
-
-  def exit do
-    IO.puts("Exiting...")
-    System.halt(0)
   end
 
   defp monitor_and_attach(id) do
@@ -250,7 +266,6 @@ defmodule NervesMCP do
         receive_loop(id)
 
       :stop ->
-        # Write any remaining buffer on exit
         if byte_size(buffer) > 0 do
           IO.write(buffer)
         end
@@ -259,61 +274,13 @@ defmodule NervesMCP do
     end
   end
 
-  # Split binary into complete UTF-8 characters and trailing incomplete bytes
+  # Holds back a character that has only partly arrived.
   defp split_utf8(binary) do
-    size = byte_size(binary)
-
-    if size == 0 do
-      {<<>>, <<>>}
-    else
-      # Find how many trailing bytes might be incomplete
-      incomplete_count = trailing_incomplete_bytes(binary, size)
-      complete_size = size - incomplete_count
-      <<complete::binary-size(^complete_size), incomplete::binary>> = binary
-      {complete, incomplete}
+    case :unicode.characters_to_binary(binary) do
+      {:incomplete, complete, rest} -> {complete, rest}
+      {:error, _valid, _rest} -> {binary, <<>>}
+      complete -> {complete, <<>>}
     end
-  end
-
-  # Count trailing bytes that form an incomplete UTF-8 sequence
-  defp trailing_incomplete_bytes(binary, size) do
-    # Check last 1-4 bytes for incomplete sequence
-    check_from = max(0, size - 4)
-
-    size
-    |> Range.new(check_from + 1, -1)
-    |> Enum.reduce_while(0, fn pos, _acc ->
-      idx = pos - 1
-      <<_::binary-size(^idx), byte, _rest::binary>> = binary
-
-      cond do
-        # ASCII or valid end of multi-byte - everything complete
-        byte <= 127 ->
-          {:halt, 0}
-
-        # Continuation byte (10xxxxxx) - keep looking back
-        byte in 128..191 ->
-          {:cont, size - idx}
-
-        # 2-byte start (110xxxxx) - need 1 more
-        byte in 192..223 ->
-          remaining = size - idx
-          {:halt, if(remaining < 2, do: remaining, else: 0)}
-
-        # 3-byte start (1110xxxx) - need 2 more
-        byte in 224..239 ->
-          remaining = size - idx
-          {:halt, if(remaining < 3, do: remaining, else: 0)}
-
-        # 4-byte start (11110xxx) - need 3 more
-        byte in 240..247 ->
-          remaining = size - idx
-          {:halt, if(remaining < 4, do: remaining, else: 0)}
-
-        # Invalid UTF-8 byte - treat as complete to avoid infinite buffering
-        true ->
-          {:halt, 0}
-      end
-    end)
   end
 
   defp input_loop(id) do

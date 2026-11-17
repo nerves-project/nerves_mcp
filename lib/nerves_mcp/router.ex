@@ -8,7 +8,12 @@ defmodule NervesMCP.Router do
   @behaviour Plug
 
   @logger Plug.Logger.init([])
-  @transport [server: NervesMCP.Server]
+  # Browsers send an Origin; only pages served from this machine may call in.
+  @transport [
+    server: NervesMCP.Server,
+    validate_origin: true,
+    allowed_origins: ["localhost", "127.0.0.1", "::1"]
+  ]
 
   @impl Plug
   def init(id), do: id

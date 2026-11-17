@@ -22,6 +22,15 @@ defmodule NervesMCPTest do
     NervesMCP.start_server(id, opts)
   end
 
+  defp bandit_pid(id) do
+    {:ok, instance, _info} = NervesMCP.Instance.lookup(id, :instance)
+
+    Enum.find_value(Supervisor.which_children(instance), fn
+      {{Bandit, _ref}, pid, _type, _modules} -> pid
+      _other -> nil
+    end)
+  end
+
   defp listening?(port) do
     case :gen_tcp.connect(~c"localhost", port, [], 1_000) do
       {:ok, socket} -> :gen_tcp.close(socket) == :ok
@@ -89,7 +98,26 @@ defmodule NervesMCPTest do
       if System.find_executable("sshpass") do
         assert {:ok, server} = start("a", connection: connection)
         refute Keyword.has_key?(server.connection, :pass)
+      else
+        assert {:error, {:invalid_connection, "a password needs" <> _}} =
+                 start("a", connection: connection)
       end
+    end
+
+    test "refuses a connection that cannot work, without trying every port" do
+      assert {:error, {:invalid_connection, _}} = start("a", connection: [type: :carrier_pigeon])
+      assert {:error, {:invalid_connection, _}} = start("a", connection: [type: :ssh])
+      assert {:error, {:invalid_connection, _}} = start("a", connection: [type: :uart])
+    end
+
+    test "listens on loopback unless told otherwise" do
+      on_exit(fn -> NervesMCP.stop_server("a") end)
+
+      assert {:ok, %{port: port}} =
+               NervesMCP.start_server("a", connection: connection("a"), port: @ports)
+
+      assert {:ok, {{127, 0, 0, 1}, ^port}} =
+               ThousandIsland.listener_info(bandit_pid("a"))
     end
   end
 

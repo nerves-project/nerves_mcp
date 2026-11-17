@@ -7,6 +7,9 @@ import Config
 # MCP server port (CLI --port overrides this)
 # config :nerves_mcp, :port, 13000
 
+# Address to listen on (CLI --ip overrides this). Loopback only by default.
+# config :nerves_mcp, :ip, :any
+
 # UART connection (CLI args override these)
 # config :nerves_mcp, :connection,
 #   type: :uart,

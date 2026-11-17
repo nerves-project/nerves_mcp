@@ -7,9 +7,14 @@ defmodule NervesMCP.Application do
 
   use Application
 
+  alias EMCP.SessionStore
+
+  require Logger
+
   @impl true
   def start(_type, _args) do
-    EMCP.SessionStore.ETS.init()
+    # The host application may use emcp too, and have made the table already.
+    if :ets.whereis(SessionStore.ETS) == :undefined, do: SessionStore.ETS.init()
 
     children = [
       {Registry, keys: :unique, name: NervesMCP.Registry},
@@ -26,12 +31,19 @@ defmodule NervesMCP.Application do
 
   # A connection in config.exs starts the default server; otherwise servers are
   # started by `NervesMCP.start_server/2` or the CLI.
-  defp start_configured_server do
+  defp start_configured_server() do
     connection = Application.get_env(:nerves_mcp, :connection, [])
 
     if Keyword.has_key?(connection, :type) do
-      port = Application.get_env(:nerves_mcp, :port, NervesMCP.default_port())
-      {:ok, _server} = NervesMCP.start_server(:default, connection: connection, port: port)
+      opts = [
+        connection: connection,
+        port: Application.get_env(:nerves_mcp, :port, NervesMCP.default_port()),
+        ip: Application.get_env(:nerves_mcp, :ip, :loopback)
+      ]
+
+      with {:error, reason} <- NervesMCP.start_server(:default, opts) do
+        Logger.error("NervesMCP could not start the configured server: #{inspect(reason)}")
+      end
     end
   end
 end
