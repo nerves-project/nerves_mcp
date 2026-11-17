@@ -14,6 +14,7 @@ defmodule NervesMCP.Instance do
   @registry NervesMCP.Registry
   @current :nerves_mcp_instance
 
+  @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
     id = Keyword.fetch!(opts, :id)
     connection = Keyword.fetch!(opts, :connection)
@@ -30,6 +31,7 @@ defmodule NervesMCP.Instance do
   def init(opts) do
     id = Keyword.fetch!(opts, :id)
     connection = Keyword.fetch!(opts, :connection)
+    type = Keyword.fetch!(connection, :type)
 
     bandit =
       [plug: {NervesMCP.Router, id}, port: Keyword.fetch!(opts, :port)] ++
@@ -38,16 +40,20 @@ defmodule NervesMCP.Instance do
     children = [
       {NervesMCP.History, id: id},
       {Bandit, bandit},
-      {connection_module(connection), id: id, config: connection},
+      {NervesMCP.Connection.Worker,
+       id: id, config: connection, type: type, transport: transport(type)},
       {NervesMCP.DeviceProbe, id: id}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
 
+  @spec via(term(), atom()) :: {:via, Registry, term()}
   def via(id, role), do: {:via, Registry, {@registry, {id, role}}}
+  @spec via(term(), atom(), term()) :: {:via, Registry, term()}
   def via(id, role, value), do: {:via, Registry, {@registry, {id, role}, value}}
 
+  @spec lookup(term(), atom()) :: {:ok, pid(), term()} | :error
   def lookup(id, role) do
     case Registry.lookup(@registry, {id, role}) do
       [{pid, value}] -> {:ok, pid, value}
@@ -55,7 +61,8 @@ defmodule NervesMCP.Instance do
     end
   end
 
-  def all do
+  @spec all() :: [map()]
+  def all() do
     @registry
     |> Registry.select([{{{:"$1", :instance}, :_, :"$2"}, [], [{{:"$1", :"$2"}}]}])
     |> Enum.map(fn {id, info} -> Map.put(info, :id, id) end)
@@ -63,13 +70,11 @@ defmodule NervesMCP.Instance do
 
   # The MCP transport asks for the server definition without saying which
   # listener the request arrived on, so the router records it for the request.
+  @spec put_current(term()) :: term()
   def put_current(id), do: Process.put(@current, id)
-  def current, do: Process.get(@current, :default)
+  @spec current() :: term()
+  def current(), do: Process.get(@current, :default)
 
-  defp connection_module(connection) do
-    case Keyword.fetch!(connection, :type) do
-      :uart -> NervesMCP.Connection.UART
-      :ssh -> NervesMCP.Connection.SSH
-    end
-  end
+  defp transport(:uart), do: NervesMCP.Connection.UART
+  defp transport(:ssh), do: NervesMCP.Connection.SSH
 end
