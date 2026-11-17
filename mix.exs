@@ -83,6 +83,16 @@ defmodule NervesMCP.MixProject do
         "deps.unlock --check-unused",
         "spellweaver.check",
         "dialyzer"
+      ],
+      precommit: [
+        "hex.audit",
+        "compile --warnings-as-errors --force",
+        "format",
+        "credo --strict",
+        "deps.unlock --unused",
+        "spellweaver.check",
+        "dialyzer",
+        "test"
       ]
     ]
   end
@@ -98,18 +108,24 @@ defmodule NervesMCP.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [precommit: :test]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:emcp, "~> 0.3"},
-      {:bandit, "~> 1.0"},
+      {:bandit, "~> 1.15"},
+      {:plug, "~> 1.20 and >= 1.20.4"},
       {:circuits_uart, "~> 1.0"},
       {:circular_buffer, "~> 0.4 or ~> 1.0"},
-      {:igniter, "~> 0.6", only: [:dev, :test]},
-      {:ex_doc, "~> 0.31", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:spellweaver, "~> 0.1", only: [:dev, :test], runtime: false}
+      {:spellweaver, "~> 0.1.8", only: [:dev, :test], runtime: false}
     ]
   end
 end

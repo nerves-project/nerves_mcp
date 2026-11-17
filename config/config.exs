@@ -23,4 +23,4 @@ import Config
 #   user: "root",
 #   port: 22
 
-config :bun, :version, "1.3.0"
+config :bun, :version, "1.4.4"
