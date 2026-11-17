@@ -32,47 +32,51 @@ defmodule NervesMCP.DeviceProbe do
 
   # Public API
 
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  def start_link(opts) do
+    id = Keyword.fetch!(opts, :id)
+    GenServer.start_link(__MODULE__, opts, name: name(id))
   end
 
+  defp name(id), do: NervesMCP.Instance.via(id, :probe)
+
   @doc "Current detected mode. Fast, non-blocking; falls back to `:unknown`."
-  def mode do
-    GenServer.call(__MODULE__, :mode, 1_000)
+  def mode(id) do
+    GenServer.call(name(id), :mode, 1_000)
   catch
     :exit, _ -> :unknown
   end
 
   @doc "Full status map for the device_status tool."
-  def status do
-    GenServer.call(__MODULE__, :status, 1_000)
+  def status(id) do
+    GenServer.call(name(id), :status, 1_000)
   catch
     :exit, _ ->
       %{mode: :unknown, detail: "probe not running", idle_ms: nil, last_probe_ms_ago: nil}
   end
 
   @doc "Record MCP activity so the idle timer does not probe during active use."
-  def touch do
-    GenServer.cast(__MODULE__, :touch)
+  def touch(id) do
+    GenServer.cast(name(id), :touch)
   end
 
   @doc "Run a probe synchronously in the caller and update the cached mode."
-  def refresh(timeout \\ @probe_timeout) do
-    result = run_probe(timeout)
-    GenServer.cast(__MODULE__, {:set_result, result})
+  def refresh(id, timeout \\ @probe_timeout) do
+    result = run_probe(id, timeout)
+    GenServer.cast(name(id), {:set_result, result})
     result
   end
 
   # GenServer callbacks
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     schedule_tick()
     # Start as if already idle so we probe shortly after boot.
     now = mono()
 
     {:ok,
      %{
+       id: Keyword.fetch!(opts, :id),
        mode: :unknown,
        detail: "not yet probed",
        last_activity: now - @idle_threshold,
@@ -148,28 +152,22 @@ defmodule NervesMCP.DeviceProbe do
 
   defp start_probe(state) do
     parent = self()
+    id = state.id
 
     {_pid, ref} =
       spawn_monitor(fn ->
-        send(parent, {:probe_result, run_probe(@probe_timeout)})
+        send(parent, {:probe_result, run_probe(id, @probe_timeout)})
       end)
 
     %{state | probing?: true, task_ref: ref}
   end
 
   @doc false
-  def run_probe(timeout) do
-    config = Application.get_env(:nerves_mcp, :connection, [])
-
+  def run_probe(id, timeout) do
     raw =
       try do
-        case Keyword.get(config, :type) do
-          :uart -> NervesMCP.Connection.UART.probe(timeout)
-          :ssh -> NervesMCP.Connection.SSH.probe(timeout)
-          _ -> :down
-        end
+        NervesMCP.Connection.probe(id, timeout)
       catch
-        :exit, _ -> :down
         kind, reason -> {:error, {kind, reason}}
       end
 

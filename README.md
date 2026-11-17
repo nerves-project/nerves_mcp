@@ -105,6 +105,32 @@ http://localhost:13000/mcp
 
 Or whatever port you specified with `--port`.
 
+## Use as a library
+
+An application can run one MCP server per device, each on its own port, without any `:nerves_mcp` configuration:
+
+```elixir
+{:ok, server} =
+  NervesMCP.start_server("nerves-1234.local",
+    connection: [type: :ssh, host: "nerves-1234.local", user: "root"],
+    ip: :loopback
+  )
+
+server.url
+#=> "http://localhost:13000/mcp"
+
+NervesMCP.servers()
+NervesMCP.stop_server("nerves-1234.local")
+```
+
+The first argument is an id of your choosing. Ports are handed out from 13000 upwards, skipping any that are taken. To keep a device on the port it had last time, remember `server.port` and put it first:
+
+```elixir
+NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_list(13000..13099)])
+```
+
+`NervesMCP.Connection` evaluates code on a running server's device directly, e.g. `NervesMCP.Connection.eval(id, "1 + 1")`.
+
 ## MCP Tools
 
 ### device_eval

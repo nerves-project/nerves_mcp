@@ -34,9 +34,10 @@ defmodule NervesMCP.Tools.DeviceStatus do
 
   @impl EMCP.Tool
   def call(_conn, args) do
-    if args["refresh"], do: NervesMCP.DeviceProbe.refresh()
+    id = NervesMCP.Instance.current()
+    if args["refresh"], do: NervesMCP.DeviceProbe.refresh(id)
 
-    status = NervesMCP.DeviceProbe.status()
+    status = NervesMCP.DeviceProbe.status(id)
 
     text = """
     Detected mode: #{status.mode}

@@ -45,10 +45,9 @@ defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
     total_timeout = args["timeout"] || 60_000
     deadline = System.monotonic_time(:millisecond) + total_timeout
 
-    config = Application.get_env(:nerves_mcp, :connection, [])
-    connection_type = Keyword.get(config, :type, :uart)
+    id = NervesMCP.Instance.current()
 
-    case poll_device(connection_type, expected_uuid, deadline) do
+    case poll_device(id, expected_uuid, deadline) do
       :ok ->
         EMCP.Tool.response([
           %{
@@ -62,7 +61,7 @@ defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
     end
   end
 
-  defp poll_device(connection_type, expected_uuid, deadline) do
+  defp poll_device(id, expected_uuid, deadline) do
     remaining = deadline - System.monotonic_time(:millisecond)
 
     if remaining <= 0 do
@@ -70,7 +69,7 @@ defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
     else
       eval_timeout = min(@eval_timeout, remaining)
 
-      case try_eval(connection_type, eval_timeout) do
+      case try_eval(id, eval_timeout) do
         {:ok, raw_uuid} when raw_uuid != "" ->
           actual_uuid = raw_uuid |> String.trim() |> String.trim(~s|"|)
 
@@ -82,34 +81,14 @@ defmodule NervesMCP.Tools.IsDeviceUpdatedTo do
           end
 
         _ ->
-          maybe_reconnect(connection_type)
+          NervesMCP.Connection.reconnect(id)
           Process.sleep(min(@retry_pause, max(0, deadline - System.monotonic_time(:millisecond))))
-          poll_device(connection_type, expected_uuid, deadline)
+          poll_device(id, expected_uuid, deadline)
       end
     end
   end
 
-  defp try_eval(connection_type, timeout) do
-    code = ~s|Nerves.Runtime.KV.get_active("nerves_fw_uuid")|
-
-    try do
-      case connection_type do
-        :uart -> NervesMCP.Connection.UART.eval(code, timeout)
-        :ssh -> NervesMCP.Connection.SSH.eval(code, timeout)
-        other -> {:error, "Unknown connection type: #{inspect(other)}"}
-      end
-    catch
-      :exit, _ -> {:error, "connection unavailable"}
-    end
+  defp try_eval(id, timeout) do
+    NervesMCP.Connection.eval(id, ~s|Nerves.Runtime.KV.get_active("nerves_fw_uuid")|, timeout)
   end
-
-  defp maybe_reconnect(:ssh) do
-    try do
-      NervesMCP.Connection.SSH.reconnect()
-    catch
-      :exit, _ -> :ok
-    end
-  end
-
-  defp maybe_reconnect(_), do: :ok
 end

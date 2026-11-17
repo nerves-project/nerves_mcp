@@ -71,7 +71,9 @@ defmodule NervesMCP.CLI do
 
     existing_config = Application.get_env(:nerves_mcp, :connection, [])
     connection = resolve_connection(opts, positional, existing_config)
-    mcp_port = Keyword.get(opts, :port, Application.get_env(:nerves_mcp, :port, 13000))
+
+    mcp_port =
+      Keyword.get(opts, :port, Application.get_env(:nerves_mcp, :port, NervesMCP.default_port()))
 
     Application.put_env(:nerves_mcp, :connection, connection)
     Application.put_env(:nerves_mcp, :port, mcp_port)
@@ -193,21 +195,16 @@ defmodule NervesMCP.CLI do
   end
 
   defp start_children(connection, mcp_port) do
-    connection_child =
-      case Keyword.fetch!(connection, :type) do
-        :uart -> NervesMCP.Connection.UART
-        :ssh -> NervesMCP.Connection.SSH
-      end
+    # A connection in config.exs has already started the default server.
+    NervesMCP.stop_server(:default)
 
-    children = [
-      NervesMCP.History,
-      {Bandit, plug: NervesMCP.Router, port: mcp_port},
-      connection_child,
-      NervesMCP.DeviceProbe
-    ]
+    case NervesMCP.start_server(:default, connection: connection, port: mcp_port) do
+      {:ok, _server} ->
+        :ok
 
-    for child <- children do
-      Supervisor.start_child(NervesMCP.Supervisor, child)
+      {:error, reason} ->
+        IO.puts("Could not start NervesMCP on port #{mcp_port}: #{inspect(reason)}")
+        System.halt(1)
     end
   end
 end

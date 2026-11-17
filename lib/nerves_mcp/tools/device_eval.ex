@@ -34,28 +34,7 @@ defmodule NervesMCP.Tools.DeviceEval do
     code = args["code"]
     timeout = args["timeout"] || 15000
 
-    config = Application.get_env(:nerves_mcp, :connection, [])
-    connection_type = Keyword.get(config, :type, :uart)
-
-    result =
-      try do
-        case connection_type do
-          :uart ->
-            NervesMCP.Connection.UART.eval(code, timeout)
-
-          :ssh ->
-            NervesMCP.Connection.SSH.eval(code, timeout)
-
-          other ->
-            {:error, "Unknown connection type: #{inspect(other)}"}
-        end
-      catch
-        :exit, {:noproc, _} ->
-          {:error, "Device connection not available (process not running)"}
-
-        :exit, reason ->
-          {:error, "Device connection error: #{inspect(reason)}"}
-      end
+    result = NervesMCP.Connection.eval(NervesMCP.Instance.current(), code, timeout)
 
     case result do
       {:ok, output} ->

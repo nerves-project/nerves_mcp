@@ -40,13 +40,14 @@ defmodule NervesMCP.Server do
   """
 
   def server do
-    NervesMCP.DeviceProbe.touch()
+    id = NervesMCP.Instance.current()
+    NervesMCP.DeviceProbe.touch(id)
 
     EMCP.Server.new(
       name: "nerves-mcp",
       version: "0.1.0",
       instructions: @instructions,
-      tools: tools_for(NervesMCP.DeviceProbe.mode())
+      tools: tools_for(NervesMCP.DeviceProbe.mode(id))
     )
   end
 

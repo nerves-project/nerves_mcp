@@ -13,59 +13,19 @@ defmodule NervesMCP.Connection.SSH do
   @initial_retry_delay 1_000
   @max_retry_delay 30_000
 
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  def eval(code, timeout \\ 15000) do
-    GenServer.call(__MODULE__, {:eval, code, timeout}, timeout + 1000)
-  end
-
-  def eval_output(code, timeout \\ 15000) do
-    GenServer.call(__MODULE__, {:eval_output, code, timeout}, timeout + 1000)
-  end
-
-  @doc "Run a raw shell command (no Elixir wrapping). Used in degraded shell mode."
-  def shell_eval(command, timeout \\ 15000) do
-    GenServer.call(__MODULE__, {:shell_eval, command, timeout}, timeout + 1000)
-  end
-
-  @doc "Run a raw shell command and capture stdout/stderr plus exit code."
-  def shell_eval_output(command, timeout \\ 15000) do
-    GenServer.call(__MODULE__, {:shell_eval_output, command, timeout}, timeout + 1000)
-  end
-
-  @doc """
-  Probe what is on the other end. Returns:
-
-    * `{:ok, result}` — an Elixir result came back (classify it upstream)
-    * `:noise`        — bytes came back but no valid Elixir result
-    * `:down`         — not connected / nothing came back
-    * `:busy`         — an evaluation is already in flight
-  """
-  def probe(timeout \\ 4_000) do
-    GenServer.call(__MODULE__, {:probe, timeout}, timeout + 1000)
-  end
-
-  def attach_console(pid \\ self()) do
-    GenServer.call(__MODULE__, {:attach_console, pid})
-  end
-
-  def detach_console do
-    GenServer.call(__MODULE__, :detach_console)
-  end
-
-  def send_raw(data) do
-    GenServer.cast(__MODULE__, {:send_raw, data})
-  end
-
-  def reconnect do
-    GenServer.call(__MODULE__, :reconnect, 10_000)
+  def start_link(opts) do
+    id = Keyword.fetch!(opts, :id)
+    GenServer.start_link(__MODULE__, opts, name: NervesMCP.Instance.via(id, :connection, :ssh))
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
+    # Lets terminate/2 run on shutdown so the ssh process is not left behind.
+    Process.flag(:trap_exit, true)
+
     state = %{
+      id: Keyword.fetch!(opts, :id),
+      config: Keyword.fetch!(opts, :config),
       port: nil,
       buffer: "",
       waiting: nil,
@@ -78,7 +38,7 @@ defmodule NervesMCP.Connection.SSH do
   end
 
   defp connect(state) do
-    config = Application.get_env(:nerves_mcp, :connection, [])
+    config = state.config
 
     host = Keyword.fetch!(config, :host)
     user = Keyword.get(config, :user, "root")
@@ -162,7 +122,7 @@ defmodule NervesMCP.Connection.SSH do
 
   def handle_call(:reconnect, _from, state) do
     # Close existing port and reconnect
-    Port.close(state.port)
+    close_port(state.port)
     new_state = connect(%{state | port: nil})
     {:reply, if(new_state.port, do: :ok, else: {:error, "reconnect failed"}), new_state}
   end
@@ -345,7 +305,7 @@ defmodule NervesMCP.Connection.SSH do
 
   @impl true
   def handle_info({port, {:data, data}}, %{port: port, waiting: nil, console: nil} = state) do
-    NervesMCP.History.push(data)
+    NervesMCP.History.push(state.id, data)
     {:noreply, state}
   end
 
@@ -353,7 +313,7 @@ defmodule NervesMCP.Connection.SSH do
         {port, {:data, data}},
         %{port: port, waiting: nil, console: {pid, _ref}} = state
       ) do
-    NervesMCP.History.push(data)
+    NervesMCP.History.push(state.id, data)
     send(pid, {:console_data, data})
     {:noreply, state}
   end
@@ -362,7 +322,7 @@ defmodule NervesMCP.Connection.SSH do
         {port, {:data, data}},
         %{port: port, waiting: {from, marker, timer_ref, acc}} = state
       ) do
-    NervesMCP.History.push(data)
+    NervesMCP.History.push(state.id, data)
     new_acc = acc <> data
 
     case match_markers(new_acc, marker, state.match_style) do
@@ -448,7 +408,20 @@ defmodule NervesMCP.Connection.SSH do
   @impl true
   def terminate(_reason, state) do
     if state.port do
-      Port.close(state.port)
+      close_port(state.port)
+    end
+
+    :ok
+  end
+
+  # Closing the port only closes ssh's stdin, which an interactive session
+  # outlives, so the process itself is told to stop as well.
+  defp close_port(port) do
+    os_pid = Port.info(port, :os_pid)
+    Port.close(port)
+
+    with {:os_pid, pid} <- os_pid, kill when is_binary(kill) <- System.find_executable("kill") do
+      System.cmd(kill, [Integer.to_string(pid)], stderr_to_stdout: true)
     end
 
     :ok

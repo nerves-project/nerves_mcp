@@ -1,18 +1,25 @@
 defmodule NervesMCP.Router do
   @moduledoc false
 
-  use Plug.Router
+  @behaviour Plug
 
-  plug(Plug.Logger)
-  plug(:match)
-  plug(:dispatch)
+  @logger Plug.Logger.init([])
+  @transport [server: NervesMCP.Server]
 
-  forward("/mcp",
-    to: EMCP.Transport.StreamableHTTP,
-    init_opts: [server: NervesMCP.Server]
-  )
+  @impl Plug
+  def init(id), do: id
 
-  match _ do
-    send_resp(conn, 404, "not found")
+  @impl Plug
+  def call(conn, id) do
+    conn = Plug.Logger.call(conn, @logger)
+
+    case conn.path_info do
+      ["mcp" | rest] ->
+        NervesMCP.Instance.put_current(id)
+        Plug.forward(conn, rest, EMCP.Transport.StreamableHTTP, @transport)
+
+      _ ->
+        Plug.Conn.send_resp(conn, 404, "not found")
+    end
   end
 end

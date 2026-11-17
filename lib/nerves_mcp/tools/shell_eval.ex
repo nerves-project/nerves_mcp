@@ -35,23 +35,7 @@ defmodule NervesMCP.Tools.ShellEval do
     command = args["command"]
     timeout = args["timeout"] || 15000
 
-    config = Application.get_env(:nerves_mcp, :connection, [])
-    connection_type = Keyword.get(config, :type, :uart)
-
-    result =
-      try do
-        case connection_type do
-          :uart -> NervesMCP.Connection.UART.shell_eval(command, timeout)
-          :ssh -> NervesMCP.Connection.SSH.shell_eval(command, timeout)
-          other -> {:error, "Unknown connection type: #{inspect(other)}"}
-        end
-      catch
-        :exit, {:noproc, _} ->
-          {:error, "Device connection not available (process not running)"}
-
-        :exit, reason ->
-          {:error, "Device connection error: #{inspect(reason)}"}
-      end
+    result = NervesMCP.Connection.shell_eval(NervesMCP.Instance.current(), command, timeout)
 
     case result do
       {:ok, output} -> EMCP.Tool.response([%{"type" => "text", "text" => output}])

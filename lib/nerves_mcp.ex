@@ -41,7 +41,128 @@ defmodule NervesMCP do
   Device output that arrives when no console is attached is stored in a
   circular buffer. Call `NervesMCP.history()` to view it, or use `#history`
   in the console.
+
+  ## Use as a library
+
+  A host application can run one server per device, each on its own port:
+
+      {:ok, server} =
+        NervesMCP.start_server("nerves-1234.local",
+          connection: [type: :ssh, host: "nerves-1234.local"]
+        )
+
+      server.url
+      #=> "http://localhost:13000/mcp"
+
+  Ports are handed out from `default_port/0` upwards, so the first server lands
+  on 13000, the next on 13001, and so on. Pass `:port` to choose where to look,
+  see `start_server/2`.
   """
+
+  alias NervesMCP.Connection
+  alias NervesMCP.Instance
+
+  @default_port 13_000
+  @port_span 100
+
+  @type id :: term()
+  @type server :: %{id: id(), port: :inet.port_number(), url: String.t(), connection: keyword()}
+
+  @doc "The port the first server listens on unless told otherwise."
+  @spec default_port() :: :inet.port_number()
+  def default_port, do: @default_port
+
+  @doc """
+  Starts an MCP server for one device.
+
+  `id` names the server and is what every other function takes to refer to it.
+  Any term works; a hostname or serial port path is a natural choice.
+
+  ## Options
+
+    * `:connection` (required) - how to reach the device, in the same shape as
+      the `:connection` application config: `[type: :ssh, host: "nerves.local",
+      user: "root", port: 22]` or `[type: :uart, port: "/dev/ttyUSB0", speed:
+      115_200]`.
+    * `:port` - the HTTP port to listen on. Either one port, or an enumerable of
+      ports to try in order, of which the first free one is used. Defaults to
+      #{@default_port}..#{@default_port + @port_span - 1}. To keep a device on
+      the port it had last time, put that port first.
+    * `:ip` - the address to listen on, as Bandit's `:ip` option. Defaults to
+      all interfaces; pass `:loopback` to accept local clients only.
+
+  Returns `{:error, :already_started}` if a server with this id is running and
+  `{:error, :no_free_port}` if none of the ports could be used.
+  """
+  @spec start_server(id(), keyword()) :: {:ok, server()} | {:error, term()}
+  def start_server(id, opts) do
+    connection = Keyword.fetch!(opts, :connection)
+    ip = Keyword.take(opts, [:ip])
+
+    ports =
+      case Keyword.get(opts, :port, @default_port..(@default_port + @port_span - 1)) do
+        port when is_integer(port) -> [port]
+        ports -> ports
+      end
+
+    if server(id) do
+      {:error, :already_started}
+    else
+      start_on_first_free(id, connection, ip, Enum.to_list(ports), :no_free_port)
+    end
+  end
+
+  defp start_on_first_free(_id, _connection, _ip, [], last_error), do: {:error, last_error}
+
+  defp start_on_first_free(id, connection, ip, [port | rest], last_error) do
+    if port_free?(port, ip) do
+      spec = {Instance, [id: id, connection: connection, port: port] ++ ip}
+
+      case DynamicSupervisor.start_child(NervesMCP.InstanceSupervisor, spec) do
+        {:ok, _pid} -> {:ok, server(id)}
+        {:error, {:already_started, _pid}} -> {:error, :already_started}
+        # Something else took the port between the check and the bind.
+        {:error, reason} -> start_on_first_free(id, connection, ip, rest, reason)
+      end
+    else
+      start_on_first_free(id, connection, ip, rest, last_error)
+    end
+  end
+
+  defp port_free?(port, ip) do
+    case :gen_tcp.listen(port, ip) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        true
+
+      {:error, _reason} ->
+        false
+    end
+  end
+
+  @doc "Stops a server and closes its device connection."
+  @spec stop_server(id()) :: :ok | {:error, :not_found}
+  def stop_server(id) do
+    case Instance.lookup(id, :instance) do
+      {:ok, pid, _info} -> DynamicSupervisor.terminate_child(NervesMCP.InstanceSupervisor, pid)
+      :error -> {:error, :not_found}
+    end
+  end
+
+  @doc "Describes a running server, or returns `nil` if there is none with this id."
+  @spec server(id()) :: server() | nil
+  def server(id) do
+    case Instance.lookup(id, :instance) do
+      {:ok, _pid, info} -> describe(Map.put(info, :id, id))
+      :error -> nil
+    end
+  end
+
+  @doc "Describes every running server."
+  @spec servers() :: [server()]
+  def servers, do: Enum.map(Instance.all(), &describe/1)
+
+  defp describe(info), do: Map.put(info, :url, "http://localhost:#{info.port}/mcp")
 
   @doc """
   Opens an interactive console to the connected device.
@@ -49,32 +170,23 @@ defmodule NervesMCP do
   Displays all incoming data from the device and allows you to send
   commands directly. Type `#quit` to exit the console and return to IEx.
   """
-  def console do
-    config = Application.get_env(:nerves_mcp, :connection, [])
-    connection_type = Keyword.get(config, :type, :uart)
-
-    connection_module =
-      case connection_type do
-        :uart -> NervesMCP.Connection.UART
-        :ssh -> NervesMCP.Connection.SSH
-      end
-
+  def console(id \\ :default) do
     # Start a process to receive and display console data
     receiver =
       spawn_link(fn ->
-        monitor_and_attach(connection_module)
-        receive_loop(connection_module)
+        monitor_and_attach(id)
+        receive_loop(id)
       end)
 
     IO.puts("Connected to device console. Commands: #quit, #history")
     IO.puts("---")
 
     try do
-      input_loop(connection_module)
+      input_loop(id)
     after
       # Clean up: stop receiver and detach console
       send(receiver, :stop)
-      connection_module.detach_console()
+      Connection.detach_console(id)
     end
 
     IO.puts("---")
@@ -88,8 +200,8 @@ defmodule NervesMCP do
   All device output that arrives when no console is attached is stored
   in a circular buffer. Use this to view what you might have missed.
   """
-  def history do
-    IO.puts(NervesMCP.History.get())
+  def history(id \\ :default) do
+    IO.puts(NervesMCP.History.get(id))
     :ok
   end
 
@@ -98,24 +210,24 @@ defmodule NervesMCP do
     System.halt(0)
   end
 
-  defp monitor_and_attach(connection_module) do
-    pid = wait_for_process(connection_module)
+  defp monitor_and_attach(id) do
+    pid = wait_for_process(id)
     Process.monitor(pid)
-    connection_module.attach_console(self())
+    Connection.attach_console(id, self())
   end
 
-  defp wait_for_process(connection_module) do
-    case Process.whereis(connection_module) do
+  defp wait_for_process(id) do
+    case Connection.whereis(id) do
       nil ->
         Process.sleep(200)
-        wait_for_process(connection_module)
+        wait_for_process(id)
 
       pid ->
         pid
     end
   end
 
-  defp receive_loop(connection_module, buffer \\ <<>>) do
+  defp receive_loop(id, buffer \\ <<>>) do
     receive do
       {:console_data, data} ->
         combined = buffer <> data
@@ -125,13 +237,13 @@ defmodule NervesMCP do
           IO.write(complete)
         end
 
-        receive_loop(connection_module, incomplete)
+        receive_loop(id, incomplete)
 
       {:DOWN, _ref, :process, _pid, _reason} ->
         IO.puts("\r\n--- Connection lost, reconnecting... ---")
-        monitor_and_attach(connection_module)
+        monitor_and_attach(id)
         IO.puts("--- Reconnected ---")
-        receive_loop(connection_module)
+        receive_loop(id)
 
       :stop ->
         # Write any remaining buffer on exit
@@ -153,7 +265,7 @@ defmodule NervesMCP do
       # Find how many trailing bytes might be incomplete
       incomplete_count = trailing_incomplete_bytes(binary, size)
       complete_size = size - incomplete_count
-      <<complete::binary-size(complete_size), incomplete::binary>> = binary
+      <<complete::binary-size(^complete_size), incomplete::binary>> = binary
       {complete, incomplete}
     end
   end
@@ -167,7 +279,7 @@ defmodule NervesMCP do
     |> Range.new(check_from + 1, -1)
     |> Enum.reduce_while(0, fn pos, _acc ->
       idx = pos - 1
-      <<_::binary-size(idx), byte, _rest::binary>> = binary
+      <<_::binary-size(^idx), byte, _rest::binary>> = binary
 
       cond do
         # ASCII or valid end of multi-byte - everything complete
@@ -200,7 +312,7 @@ defmodule NervesMCP do
     end)
   end
 
-  defp input_loop(connection_module) do
+  defp input_loop(id) do
     case IO.gets("") do
       :eof ->
         :ok
@@ -217,13 +329,13 @@ defmodule NervesMCP do
 
           "#history" ->
             IO.puts("--- History ---")
-            IO.puts(NervesMCP.History.get())
+            IO.puts(NervesMCP.History.get(id))
             IO.puts("--- End History ---")
-            input_loop(connection_module)
+            input_loop(id)
 
           _ ->
-            connection_module.send_raw(input)
-            input_loop(connection_module)
+            Connection.send_raw(id, input)
+            input_loop(id)
         end
     end
   end

@@ -7,31 +7,27 @@ defmodule NervesMCP.Application do
   def start(_type, _args) do
     EMCP.SessionStore.ETS.init()
 
-    config = Application.get_env(:nerves_mcp, :connection, [])
-
-    children =
-      if Keyword.has_key?(config, :type) do
-        # Connection configured via config.exs — start everything
-        connection_child =
-          case Keyword.fetch!(config, :type) do
-            :uart -> NervesMCP.Connection.UART
-            :ssh -> NervesMCP.Connection.SSH
-          end
-
-        port = Application.get_env(:nerves_mcp, :port, 13000)
-
-        [
-          NervesMCP.History,
-          {Bandit, plug: NervesMCP.Router, port: port},
-          connection_child,
-          NervesMCP.DeviceProbe
-        ]
-      else
-        # No config — CLI.run/1 will start children later
-        []
-      end
+    children = [
+      {Registry, keys: :unique, name: NervesMCP.Registry},
+      {DynamicSupervisor, name: NervesMCP.InstanceSupervisor, strategy: :one_for_one}
+    ]
 
     opts = [strategy: :one_for_one, name: NervesMCP.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, pid} <- Supervisor.start_link(children, opts) do
+      start_configured_server()
+      {:ok, pid}
+    end
+  end
+
+  # A connection in config.exs starts the default server; otherwise servers are
+  # started by `NervesMCP.start_server/2` or the CLI.
+  defp start_configured_server do
+    connection = Application.get_env(:nerves_mcp, :connection, [])
+
+    if Keyword.has_key?(connection, :type) do
+      port = Application.get_env(:nerves_mcp, :port, NervesMCP.default_port())
+      {:ok, _server} = NervesMCP.start_server(:default, connection: connection, port: port)
+    end
   end
 end
