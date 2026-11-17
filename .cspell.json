@@ -1,0 +1,32 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "ignorePaths": [
+    "_build",
+    "deps",
+    "doc",
+    "LICENSES",
+    "LICENSE.md",
+    "mix.lock",
+    "REUSE.toml"
+  ],
+  "words": [
+    "demonitor",
+    "eaddrinuse",
+    "EMCP",
+    "emcp",
+    "escript",
+    "Escript",
+    "exnvr",
+    "helloagain",
+    "noproc",
+    "spellweaver",
+    "sshpass",
+    "SSHPASS",
+    "Streamable",
+    "uart",
+    "UART",
+    "whereis",
+    "Wikman"
+  ]
+}
