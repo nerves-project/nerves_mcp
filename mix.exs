@@ -6,6 +6,8 @@ defmodule NervesMCP.MixProject do
   use Mix.Project
 
   @version "VERSION" |> File.read!() |> String.trim()
+  @description "MCP server that lets AI assistants work with Nerves devices over serial or SSH"
+  @source_url "https://github.com/nerves-project/nerves_mcp"
 
   def project do
     [
@@ -15,8 +17,9 @@ defmodule NervesMCP.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      name: "Nerves mcp",
-      description: "TODO: write a proper description",
+      name: "NervesMCP",
+      description: @description,
+      source_url: @source_url,
       docs: docs(),
       package: package(),
       aliases: aliases(),
@@ -40,7 +43,9 @@ defmodule NervesMCP.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      extras: ["README.md"]
+      source_url: @source_url,
+      extras: ["README.md", "CHANGELOG.md"],
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]
   end
 
@@ -59,7 +64,12 @@ defmodule NervesMCP.MixProject do
         "VERSION"
       ],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/TODO/nerves_mcp"}
+      links: %{
+        "Changelog" => "https://hexdocs.pm/nerves_mcp/changelog.html",
+        "GitHub" => @source_url,
+        "REUSE Compliance" =>
+          "https://api.reuse.software/info/github.com/nerves-project/nerves_mcp"
+      }
     ]
   end
 
