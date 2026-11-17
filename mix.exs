@@ -5,10 +5,12 @@
 defmodule NervesMCP.MixProject do
   use Mix.Project
 
+  @version "VERSION" |> File.read!() |> String.trim()
+
   def project do
     [
       app: :nerves_mcp,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -33,6 +35,7 @@ defmodule NervesMCP.MixProject do
   def docs do
     [
       main: "readme",
+      source_ref: "v#{@version}",
       extras: ["README.md"]
     ]
   end
@@ -48,7 +51,8 @@ defmodule NervesMCP.MixProject do
         "README.md",
         "LICENSE.md",
         "CHANGELOG.md",
-        "REUSE.toml"
+        "REUSE.toml",
+        "VERSION"
       ],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/TODO/nerves_mcp"}

@@ -49,11 +49,13 @@ defmodule NervesMCP.Server do
 
     EMCP.Server.new(
       name: "nerves-mcp",
-      version: "0.1.0",
+      version: version(),
       instructions: @instructions,
       tools: tools_for(NervesMCP.DeviceProbe.mode(id))
     )
   end
+
+  defp version, do: to_string(Application.spec(:nerves_mcp, :vsn))
 
   defp tools_for(:nerves) do
     @base ++ [Tools.DeviceEval, Tools.DeviceEvalOutput, Tools.GrepRingLogger, Tools.GrepDmesg]
