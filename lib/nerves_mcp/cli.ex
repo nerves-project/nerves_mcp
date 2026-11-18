@@ -27,8 +27,6 @@ defmodule NervesMCP.CLI do
   packed into an escript. Use `mix nerves_mcp` for serial devices.
   """
 
-  @serial_patterns ["/dev/tty", "/dev/cu.", "/dev/serial"]
-
   @switches [
     serial: :string,
     ssh: :string,
@@ -210,7 +208,7 @@ defmodule NervesMCP.CLI do
   end
 
   defp positional_config(target, opts, configured) do
-    if Enum.any?(@serial_patterns, &String.starts_with?(target, &1)) do
+    if String.starts_with?(target, "/") do
       serial_config(target, opts, configured)
     else
       ssh_config(target, opts, configured)

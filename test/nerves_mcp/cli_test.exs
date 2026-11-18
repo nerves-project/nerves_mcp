@@ -18,6 +18,12 @@ defmodule NervesMCP.CLITest do
     assert settings[:ip] == :loopback
   end
 
+  test "any absolute path means a serial connection" do
+    assert {:ok, settings} = parse("/tmp/pty-device")
+    assert settings[:connection][:type] == :uart
+    assert settings[:connection][:port] == "/tmp/pty-device"
+  end
+
   test "anything else means an SSH host" do
     assert {:ok, settings} = parse("nerves.local --user me --ssh-port 2222 --port 4000")
 
