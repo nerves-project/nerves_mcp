@@ -81,14 +81,17 @@ defmodule NervesMCP.Connection.Protocol do
 
   # One command, so the shell prints no prompt or echo between the markers.
   # The quotes keep the marker itself out of what the terminal echoes back.
+  # A bare `eval` that cannot parse its command makes ash and dash drop the
+  # rest of the line, end marker included. `command eval` carries on, and
+  # unlike a subshell it keeps the working directory and variables.
   @spec shell(String.t(), String.t()) :: String.t()
   def shell(command, marker) do
-    "echo '#{marker}''_START'; eval #{shell_quote(command)}; echo '#{marker}''_END'\n"
+    "echo '#{marker}''_START'; command eval #{shell_quote(command)}; echo '#{marker}''_END'\n"
   end
 
   @spec shell_output(String.t(), String.t()) :: String.t()
   def shell_output(command, marker) do
-    "echo '#{marker}''_START'; echo 'OUTPUT:'; eval #{shell_quote(command)} 2>&1; " <>
+    "echo '#{marker}''_START'; echo 'OUTPUT:'; command eval #{shell_quote(command)} 2>&1; " <>
       "__mcp_rc=$?; echo 'RESULT:'; echo \"Exit code: $__mcp_rc\"; echo '#{marker}''_END'\n"
   end
 
