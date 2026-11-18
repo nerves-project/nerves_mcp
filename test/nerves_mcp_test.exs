@@ -110,6 +110,20 @@ defmodule NervesMCPTest do
       assert {:error, {:invalid_connection, _}} = start("a", connection: [type: :uart])
     end
 
+    @tag :tmp_dir
+    test "refuses output options that cannot work", %{tmp_dir: tmp_dir} do
+      assert {:error, {:invalid_option, ":on_output" <> _}} = start("a", on_output: :nope)
+      assert {:error, {:invalid_option, "cannot write" <> _}} = start("a", log_file: tmp_dir)
+    end
+
+    @tag :tmp_dir
+    test "makes the log file it was asked to write to", %{tmp_dir: tmp_dir} do
+      path = Path.join([tmp_dir, "logs", "device.log"])
+
+      assert {:ok, _server} = start("a", log_file: path)
+      assert File.read!(path) == ""
+    end
+
     test "listens on loopback unless told otherwise" do
       on_exit(fn -> NervesMCP.stop_server("a") end)
 

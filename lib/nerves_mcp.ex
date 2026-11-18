@@ -41,6 +41,15 @@ defmodule NervesMCP do
         user: "root",
         port: 22
 
+  ### Logging device output
+
+  Nothing the device prints is written to disk unless you ask for it. To append
+  everything the default server receives to a file:
+
+      config :nerves_mcp, :log_file, "nerves_mcp.log"
+
+  The file holds whatever passed over the console, which can include secrets.
+
   ## Interactive Console
 
   Call `NervesMCP.console()` to enter an interactive console session.
@@ -67,6 +76,14 @@ defmodule NervesMCP do
   Ports are handed out from `default_port/0` upwards, so the first server lands
   on 13000, the next on 13001, and so on. Pass `:port` to choose where to look,
   see `start_server/2`.
+
+  To collect what goes on with a device, pass a function as `:on_output`. It is
+  given everything the device prints, including what the MCP tools cause:
+
+      NervesMCP.start_server(id,
+        connection: connection,
+        on_output: fn data -> MyApp.DeviceLog.append(id, data) end
+      )
   """
 
   alias NervesMCP.Connection
@@ -101,15 +118,22 @@ defmodule NervesMCP do
     * `:ip` - the address to listen on, as Bandit's `:ip` option. Defaults to
       `:loopback`, which accepts local clients only. Anyone who can reach the
       port can run code on the device, so only pass `:any` on a trusted network.
+    * `:on_output` - a function that is called with each piece of output the
+      device sends, as a binary. Pieces arrive as they come off the wire, so
+      they do not line up with lines. The function runs in the connection
+      process and holds up the device while it does, so keep it quick. Not set
+      by default.
+    * `:log_file` - a file to append all device output to. Not set by default.
 
   Returns `{:error, :already_started}` if a server with this id is running,
-  `{:error, :no_free_port}` if none of the ports could be used, and
-  `{:error, {:invalid_connection, message}}` if the connection cannot work.
+  `{:error, :no_free_port}` if none of the ports could be used,
+  `{:error, {:invalid_connection, message}}` if the connection cannot work and
+  `{:error, {:invalid_option, message}}` if another option cannot be used.
   """
   @spec start_server(id(), keyword()) :: {:ok, server()} | {:error, term()}
   def start_server(id, opts) do
     connection = Keyword.fetch!(opts, :connection)
-    ip = [ip: Keyword.get(opts, :ip, :loopback)]
+    ip = Keyword.get(opts, :ip, :loopback)
 
     ports =
       case Keyword.get(opts, :port, @default_port..(@default_port + @port_span - 1)) do
@@ -117,26 +141,62 @@ defmodule NervesMCP do
         ports -> ports
       end
 
-    case {server(id), Connection.validate(connection)} do
-      {nil, :ok} -> start_on_first_free(id, connection, ip, Enum.to_list(ports))
-      {nil, {:error, message}} -> {:error, {:invalid_connection, message}}
-      {_server, _valid} -> {:error, :already_started}
+    with nil <- server(id),
+         :ok <- Connection.validate(connection),
+         {:ok, outputs} <- outputs(opts) do
+      settings = [id: id, connection: connection, ip: ip, outputs: outputs]
+      start_on_first_free(settings, Enum.to_list(ports))
+    else
+      %{} -> {:error, :already_started}
+      {:error, {:invalid_option, _message}} = error -> error
+      {:error, message} -> {:error, {:invalid_connection, message}}
     end
   end
 
-  defp start_on_first_free(_id, _connection, _ip, []), do: {:error, :no_free_port}
+  defp outputs(opts) do
+    with {:ok, callback} <- callback_output(opts[:on_output]),
+         {:ok, log} <- log_output(opts[:log_file]) do
+      {:ok, callback ++ log}
+    end
+  end
 
-  defp start_on_first_free(id, connection, ip, [port | rest]) do
-    case try_port(id, connection, ip, port) do
-      :taken -> start_on_first_free(id, connection, ip, rest)
+  defp callback_output(nil), do: {:ok, []}
+  defp callback_output(fun) when is_function(fun, 1), do: {:ok, [fun]}
+
+  defp callback_output(_other),
+    do: {:error, {:invalid_option, ":on_output must be a function that takes one argument"}}
+
+  defp log_output(nil), do: {:ok, []}
+
+  defp log_output(path) when is_binary(path) do
+    path = Path.expand(path)
+
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.write(path, "", [:append]) do
+      {:ok, [&File.write!(path, &1, [:append])]}
+    else
+      {:error, reason} ->
+        {:error,
+         {:invalid_option, "cannot write to log file #{path}: #{:file.format_error(reason)}"}}
+    end
+  end
+
+  defp log_output(_other), do: {:error, {:invalid_option, ":log_file must be a path"}}
+
+  defp start_on_first_free(_settings, []), do: {:error, :no_free_port}
+
+  defp start_on_first_free(settings, [port | rest]) do
+    case try_port(settings, port) do
+      :taken -> start_on_first_free(settings, rest)
       result -> result
     end
   end
 
-  defp try_port(id, connection, ip, port) do
-    spec = {Instance, [id: id, connection: connection, port: port] ++ ip}
+  defp try_port(settings, port) do
+    id = Keyword.fetch!(settings, :id)
+    spec = {Instance, [port: port] ++ settings}
 
-    with true <- port_free?(port, ip),
+    with true <- port_free?(port, Keyword.take(settings, [:ip])),
          {:ok, _pid} <- DynamicSupervisor.start_child(NervesMCP.InstanceSupervisor, spec) do
       {:ok, server(id)}
     else

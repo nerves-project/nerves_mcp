@@ -10,10 +10,10 @@ defmodule NervesMCP.Server do
   the transport, so it reflects the current device state as detected by
   `NervesMCP.DeviceProbe`.
 
-    * `:nerves` — full Elixir + Nerves tooling
-    * `:elixir` — Elixir eval only (Elixir runs, but not confirmed Nerves)
-    * `:shell`  — degraded raw shell tooling (device responds but no Elixir)
-    * `:down` / `:unknown` — just the wait/status tools
+    * `:nerves` - full Elixir + Nerves tooling
+    * `:elixir` - Elixir eval only (Elixir runs, but not confirmed Nerves)
+    * `:shell`  - degraded raw shell tooling (device responds but no Elixir)
+    * `:down` / `:unknown` - just the wait/status tools
 
   `is_device_up`, `is_device_updated_to` and `device_status` are always offered
   so you can wait for a device to come up regardless of its current state.

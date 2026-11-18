@@ -22,9 +22,7 @@ defmodule NervesMCP.CLI do
   Common options:
       --port PORT    MCP server port (default: 13000)
       --ip ADDRESS   Address to listen on (default: loopback), or "any"
-
-  The escript build only supports SSH, since the serial driver cannot be
-  packed into an escript. Use `mix nerves_mcp` for serial devices.
+      --log-file FILE  Append everything the device prints to FILE
   """
 
   @switches [
@@ -35,7 +33,8 @@ defmodule NervesMCP.CLI do
     speed: :integer,
     user: :string,
     ssh_port: :integer,
-    pass: :string
+    pass: :string,
+    log_file: :string
   ]
 
   @usage """
@@ -56,17 +55,11 @@ defmodule NervesMCP.CLI do
     --user USER        SSH user (default: root)
     --ssh-port PORT    SSH port (default: 22)
     --pass PASSWORD    SSH password (requires sshpass; not for high-security use)
+    --log-file FILE    Append everything the device prints to FILE (default: not kept)
 
   Connection can also be configured in config/config.exs.
   CLI arguments override config values.
   """
-
-  @doc "Entry point of the escript."
-  @spec main([String.t()]) :: :ok
-  def main(args) do
-    run(args, serial?: false)
-    repl()
-  end
 
   @spec repl() :: :ok
   def repl() do
@@ -97,18 +90,19 @@ defmodule NervesMCP.CLI do
   Starts the default server from command line arguments, halting with a
   message when they do not describe a usable connection.
   """
-  @spec run([String.t()], keyword()) :: :ok
-  def run(args, opts \\ []) do
+  @spec run([String.t()]) :: :ok
+  def run(args) do
     config = [
       connection: Application.get_env(:nerves_mcp, :connection, []),
       port: Application.get_env(:nerves_mcp, :port, NervesMCP.default_port()),
-      ip: Application.get_env(:nerves_mcp, :ip, :loopback)
+      ip: Application.get_env(:nerves_mcp, :ip, :loopback),
+      log_file: Application.get_env(:nerves_mcp, :log_file)
     ]
 
     with {:ok, settings} <- parse(args, config),
-         :ok <- check_transport(settings[:connection], Keyword.get(opts, :serial?, true)),
          {:ok, server} <- start(settings) do
       IO.puts("NervesMCP started at #{server.url} via #{describe(settings[:connection])}")
+      if settings[:log_file], do: IO.puts("Device output is logged to #{settings[:log_file]}")
       maybe_print_claude_hint(server.url)
     else
       {:error, message} ->
@@ -128,7 +122,13 @@ defmodule NervesMCP.CLI do
     with :ok <- check_invalid(invalid),
          {:ok, ip} <- parse_ip(opts[:ip], config[:ip]),
          {:ok, connection} <- resolve_connection(opts, positional, config[:connection]) do
-      {:ok, [connection: connection, port: Keyword.get(opts, :port, config[:port]), ip: ip]}
+      {:ok,
+       [
+         connection: connection,
+         port: Keyword.get(opts, :port, config[:port]),
+         ip: ip,
+         log_file: Keyword.get(opts, :log_file, config[:log_file])
+       ]}
     end
   end
 
@@ -152,15 +152,6 @@ defmodule NervesMCP.CLI do
     end
   end
 
-  defp check_transport(connection, serial?) do
-    if connection[:type] == :uart and not serial? do
-      {:error,
-       "Serial devices are not supported by the escript. Run `mix nerves_mcp` in a project that depends on nerves_mcp instead."}
-    else
-      :ok
-    end
-  end
-
   defp start(settings) do
     # A connection in config.exs has already started the default server.
     NervesMCP.stop_server(:default)
@@ -171,6 +162,9 @@ defmodule NervesMCP.CLI do
 
       {:error, {:invalid_connection, message}} ->
         {:error, "Cannot connect: #{message}"}
+
+      {:error, {:invalid_option, message}} ->
+        {:error, "Cannot start: #{message}"}
 
       {:error, reason} ->
         {:error, "Could not start NervesMCP on port #{settings[:port]}: #{inspect(reason)}"}

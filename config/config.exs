@@ -10,6 +10,9 @@ import Config
 # Address to listen on (CLI --ip overrides this). Loopback only by default.
 # config :nerves_mcp, :ip, :any
 
+# Append everything the device prints to a file (CLI --log-file overrides this)
+# config :nerves_mcp, :log_file, "nerves_mcp.log"
+
 # UART connection (CLI args override these)
 # config :nerves_mcp, :connection,
 #   type: :uart,

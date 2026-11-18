@@ -11,11 +11,11 @@ defmodule NervesMCP.DeviceProbe do
   sent to the device. The probe evaluates the Nerves firmware UUID and classifies
   the connection into one of:
 
-    * `:nerves`  — Elixir evaluated and a firmware UUID came back (confirmed Nerves)
-    * `:elixir`  — Elixir evaluated but no UUID (Elixir runs, not a Nerves device)
-    * `:shell`   — bytes came back but no valid Elixir result (some other serial)
-    * `:down`    — nothing came back at all
-    * `:unknown` — not probed yet / could not determine
+    * `:nerves`  - Elixir evaluated and a firmware UUID came back (confirmed Nerves)
+    * `:elixir`  - Elixir evaluated but no UUID (Elixir runs, not a Nerves device)
+    * `:shell`   - bytes came back but no valid Elixir result (some other serial)
+    * `:down`    - nothing came back at all
+    * `:unknown` - not probed yet / could not determine
 
   The probe is resilient: a device that returns *some* output but cannot run
   Elixir degrades to `:shell` rather than reporting failure, so the server can

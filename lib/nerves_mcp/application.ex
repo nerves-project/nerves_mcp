@@ -38,7 +38,8 @@ defmodule NervesMCP.Application do
       opts = [
         connection: connection,
         port: Application.get_env(:nerves_mcp, :port, NervesMCP.default_port()),
-        ip: Application.get_env(:nerves_mcp, :ip, :loopback)
+        ip: Application.get_env(:nerves_mcp, :ip, :loopback),
+        log_file: Application.get_env(:nerves_mcp, :log_file)
       ]
 
       with {:error, reason} <- NervesMCP.start_server(:default, opts) do

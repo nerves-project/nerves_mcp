@@ -21,30 +21,19 @@ end
 
 ## Usage
 
-NervesMCP can be run as a Mix task or as a standalone escript. The first argument is either a serial device path or an SSH host — NervesMCP auto-detects which based on the path.
+NervesMCP is run as a Mix task. The first argument is either a serial device path or an SSH host. NervesMCP auto-detects which based on the path.
 
 ### Mix task
 
 ```bash
-# Serial — auto-detected from leading /
+# Serial, auto-detected from leading /
 mix nerves_mcp /dev/ttyUSB0
 mix nerves_mcp /dev/ttyUSB0 --speed 9600
 
-# SSH — anything that isn't a serial path is treated as a hostname
+# SSH, anything that isn't a serial path is treated as a hostname
 mix nerves_mcp nerves.local
 mix nerves_mcp nerves.local --user root --ssh-port 2222
 ```
-
-### Escript
-
-Build the escript and run it directly:
-
-```bash
-mix escript.build
-./nerves_mcp nerves.local --user exnvr --port 4000
-```
-
-The escript only supports SSH. The serial driver cannot be packed into an escript, so use the Mix task for serial devices.
 
 ### Use as a library
 
@@ -69,6 +58,17 @@ The first argument is an id of your choosing. Ports are handed out from 13000 up
 NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_list(13000..13099)])
 ```
 
+To collect what goes on with a device, pass a function as `:on_output`. It is called with everything the device prints, including what the MCP tools cause, in pieces as they arrive:
+
+```elixir
+NervesMCP.start_server(id,
+  connection: connection,
+  on_output: fn data -> MyApp.DeviceLog.append(id, data) end
+)
+```
+
+The function runs in the connection process, so keep it quick. `:log_file` takes a path and appends the same output to that file.
+
 `NervesMCP.Connection` evaluates code on a running server's device directly, e.g. `NervesMCP.Connection.eval(id, "1 + 1")`.
 
 ### Options
@@ -81,6 +81,7 @@ NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_l
 | `--user`       | SSH username                       | `root`    |
 | `--ssh-port`   | SSH port                           | `22`      |
 | `--pass`       | SSH password (needs `sshpass`)     |           |
+| `--log-file`   | Append device output to this file  | not kept  |
 | `--serial`     | Force serial mode (pass device)    |           |
 | `--ssh`        | Force SSH mode (pass host)         |           |
 
@@ -104,6 +105,12 @@ config :nerves_mcp, :connection,
   host: "nerves.local",
   user: "root",
   port: 22
+```
+
+Device output is not written to disk unless you ask for it, with `--log-file` or in config. The file holds everything that passed over the console, which can include secrets.
+
+```elixir
+config :nerves_mcp, :log_file, "nerves_mcp.log"
 ```
 
 With config in place, you can start without any arguments:

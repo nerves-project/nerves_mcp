@@ -41,7 +41,11 @@ defmodule NervesMCP.Instance do
       {NervesMCP.History, id: id},
       {Bandit, bandit},
       {NervesMCP.Connection.Worker,
-       id: id, config: connection, type: type, transport: transport(type)},
+       id: id,
+       config: connection,
+       type: type,
+       transport: transport(type),
+       outputs: Keyword.get(opts, :outputs, [])},
       {NervesMCP.DeviceProbe, id: id}
     ]
 

@@ -60,6 +60,34 @@ defmodule NervesMCP.Connection.WorkerTest do
     assert Task.await(task) == {:ok, "42"}
   end
 
+  test "hands device output to every output function, even after one fails", %{id: id} do
+    test = self()
+    id = {id, :outputs}
+    start_supervised!({NervesMCP.History, id: id}, id: :outputs_history)
+
+    worker =
+      start_supervised!(
+        {Connection.Worker,
+         id: id,
+         type: :uart,
+         transport: NervesMCP.FakeTransport,
+         config: [test: test],
+         outputs: [fn _data -> raise "boom" end, &send(test, {:output, &1})]},
+        id: :outputs_worker
+      )
+
+    assert_receive {:opened, ^worker}
+
+    send(worker, {:device, "booting"})
+    assert_receive {:output, "booting"}
+
+    task = request(fn -> Connection.eval(id, "1 + 1") end)
+    answer(worker, sent_marker(), "2")
+    assert Task.await(task) == {:ok, "2"}
+    assert_receive {:output, answered}
+    assert answered =~ "_START\n2\n"
+  end
+
   test "runs requests one at a time, in order", %{id: id, worker: worker} do
     first = request(fn -> Connection.eval(id, ":first") end)
     first_marker = sent_marker()

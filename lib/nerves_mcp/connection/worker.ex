@@ -39,6 +39,7 @@ defmodule NervesMCP.Connection.Worker do
       current: nil,
       queue: :queue.new(),
       console: nil,
+      outputs: Keyword.get(opts, :outputs, []),
       retry_delay: @initial_retry_delay,
       retry_timer: nil,
       reported_down?: false
@@ -180,6 +181,7 @@ defmodule NervesMCP.Connection.Worker do
 
   defp received(state, data) do
     History.push(state.id, data)
+    emit(state, data)
     # Only a link that carries data counts as working again.
     state = %{state | retry_delay: @initial_retry_delay, reported_down?: false}
 
@@ -200,6 +202,21 @@ defmodule NervesMCP.Connection.Worker do
           {:cont, acc} ->
             %{state | current: %{current | acc: acc}}
         end
+    end
+  end
+
+  # A failing output function must not take the device link down with it.
+  defp emit(state, data) do
+    for output <- state.outputs do
+      try do
+        output.(data)
+      catch
+        kind, reason ->
+          Logger.warning(
+            "NervesMCP #{inspect(state.id)}: output function failed: " <>
+              Exception.format_banner(kind, reason)
+          )
+      end
     end
   end
 

@@ -68,6 +68,17 @@ defmodule NervesMCP.CLITest do
     assert {:error, "Not an IP address" <> _} = parse("nerves.local --ip nope")
   end
 
+  test "device output is only logged to a file when asked" do
+    assert {:ok, settings} = parse("nerves.local")
+    assert settings[:log_file] == nil
+
+    assert {:ok, settings} = parse("nerves.local", Keyword.put(@config, :log_file, "a.log"))
+    assert settings[:log_file] == "a.log"
+
+    assert {:ok, settings} = parse("nerves.local --log-file b.log")
+    assert settings[:log_file] == "b.log"
+  end
+
   test "unknown options are refused" do
     assert {:error, "Unknown or malformed option: --sped" <> _} = parse("nerves.local --sped 1")
     assert {:error, "Unknown or malformed option: --port" <> _} = parse("nerves.local --port x")
