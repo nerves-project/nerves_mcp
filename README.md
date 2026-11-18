@@ -6,7 +6,9 @@
 # NervesMCP
 
 [![Hex version](https://img.shields.io/hexpm/v/nerves_mcp.svg "Hex version")](https://hex.pm/packages/nerves_mcp)
-[![API docs](https://img.shields.io/hexpm/v/nerves_mcp.svg?label=hexdocs "API docs")](https://hexdocs.pm/nerves_mcp/NervesMCP.html)
+[![API docs](https://img.shields.io/hexpm/v/nerves_mcp.svg?label=hexdocs "API docs")](https://nerves-mcp.hexdocs.pm/NervesMCP.html)
+[![Nerves compatibility](https://compatibility.nerves-project.org/badge/nerves_mcp.svg)](https://compatibility.nerves-project.org/packages/nerves_mcp)
+[![CI](https://github.com/nerves-project/nerves_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/nerves-project/nerves_mcp/actions/workflows/ci.yml)
 [![REUSE status](https://api.reuse.software/badge/github.com/nerves-project/nerves_mcp)](https://api.reuse.software/info/github.com/nerves-project/nerves_mcp)
 
 An MCP (Model Context Protocol) server for interacting with Nerves devices. Enables AI assistants to evaluate Elixir code on embedded devices connected via UART or SSH.
