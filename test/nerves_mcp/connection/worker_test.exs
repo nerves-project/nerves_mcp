@@ -170,6 +170,22 @@ defmodule NervesMCP.Connection.WorkerTest do
     assert Task.await(task) == {:ok, "2"}
   end
 
+  test "probe stays out of a line being typed at the console", %{id: id, worker: worker} do
+    Connection.send_raw(id, "IO.puts(")
+    assert_receive {:written, "IO.puts("}
+    assert Connection.probe(id) == :busy
+
+    Connection.send_raw(id, "1)\r")
+    assert_receive {:written, "1)\r"}
+    assert Connection.probe(id) == :busy
+
+    :ok = Connection.attach_console(id)
+    :ok = Connection.detach_console(id)
+    task = request(fn -> Connection.probe(id) end)
+    answer(worker, sent_marker(), ~s|"uuid-1"|)
+    assert Task.await(task) == {:ok, ~s|"uuid-1"|}
+  end
+
   test "firmware_uuid/2 only accepts a UUID", %{id: id, worker: worker} do
     task = request(fn -> Connection.firmware_uuid(id) end)
     answer(worker, sent_marker(), ~s|"1234-abcd"|)
@@ -189,5 +205,18 @@ defmodule NervesMCP.Connection.WorkerTest do
     send(worker, {:device, "again"})
     refute_receive {:console_data, _data}, 50
     assert NervesMCP.History.get(id) == "helloagain"
+  end
+
+  test "keeps a request and what trails it off the console", %{id: id, worker: worker} do
+    :ok = Connection.attach_console(id)
+    task = request(fn -> Connection.eval(id, "1 + 1") end)
+    answer(worker, sent_marker(), "2")
+    assert Task.await(task) == {:ok, "2"}
+
+    send(worker, {:device, ":ok\niex(2)> "})
+    refute_receive {:console_data, _data}, 50
+
+    Process.send_after(worker, {:device, "later"}, 200)
+    assert_receive {:console_data, "later"}, 1_000
   end
 end

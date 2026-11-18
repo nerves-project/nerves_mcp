@@ -18,6 +18,11 @@ defmodule NervesMCP.Connection.Worker do
   @initial_retry_delay 1_000
   @max_retry_delay 30_000
   @not_connected "Device not connected (reconnecting...)"
+  # What a device prints once a request is answered, such as the prompt, is
+  # kept off the console for this long.
+  @settle 150
+  # A probe waits this long after the last thing typed at the console.
+  @typing_pause 10_000
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -40,6 +45,9 @@ defmodule NervesMCP.Connection.Worker do
       queue: :queue.new(),
       console: nil,
       outputs: Keyword.get(opts, :outputs, []),
+      line_open?: false,
+      typed_at: nil,
+      quiet_until: nil,
       retry_delay: @initial_retry_delay,
       retry_timer: nil,
       reported_down?: false
@@ -68,7 +76,7 @@ defmodule NervesMCP.Connection.Worker do
   end
 
   def handle_call({:probe, _timeout} = request, from, state) do
-    if state.current == nil and :queue.is_empty(state.queue) do
+    if state.current == nil and :queue.is_empty(state.queue) and not typing?(state) do
       {:noreply, start(state, from, request)}
     else
       {:reply, :busy, state}
@@ -86,7 +94,7 @@ defmodule NervesMCP.Connection.Worker do
   @impl GenServer
   def handle_cast({:send_raw, data}, state) do
     if state.handle, do: state.transport.write(state.handle, data)
-    {:noreply, state}
+    {:noreply, typed(state, IO.iodata_to_binary(data))}
   end
 
   @impl GenServer
@@ -109,7 +117,7 @@ defmodule NervesMCP.Connection.Worker do
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{console: {_console, ref}} = state) do
-    {:noreply, %{state | console: nil}}
+    {:noreply, %{state | console: nil, line_open?: false, typed_at: nil}}
   end
 
   def handle_info(_message, %{handle: nil} = state) do
@@ -187,7 +195,7 @@ defmodule NervesMCP.Connection.Worker do
 
     case state.current do
       nil ->
-        to_console(state, data)
+        if not settling?(state), do: to_console(state, data)
         state
 
       %{marker: marker, style: style} = current ->
@@ -197,7 +205,7 @@ defmodule NervesMCP.Connection.Worker do
           {:done, status, text} ->
             Process.cancel_timer(current.timer)
             GenServer.reply(current.from, result(current.kind, status, text))
-            next(%{state | current: nil})
+            next(%{state | current: nil, quiet_until: now() + @settle})
 
           {:cont, acc} ->
             %{state | current: %{current | acc: acc}}
@@ -266,10 +274,27 @@ defmodule NervesMCP.Connection.Worker do
 
   defp detach(%{console: {_pid, ref}} = state) do
     Process.demonitor(ref, [:flush])
-    %{state | console: nil}
+    %{state | console: nil, line_open?: false, typed_at: nil}
   end
 
   defp detach(state), do: state
+
+  defp typed(state, ""), do: state
+
+  defp typed(state, data) do
+    line_open? = not String.ends_with?(data, ["\r", "\n", <<3>>, <<21>>])
+    %{state | line_open?: line_open?, typed_at: now()}
+  end
+
+  # A probe written into a line someone is typing would ruin both.
+  defp typing?(%{line_open?: true}), do: true
+  defp typing?(%{typed_at: nil}), do: false
+  defp typing?(state), do: now() - state.typed_at < @typing_pause
+
+  defp settling?(%{quiet_until: nil}), do: false
+  defp settling?(state), do: now() < state.quiet_until
+
+  defp now(), do: System.monotonic_time(:millisecond)
 
   defp to_console(%{console: {pid, _ref}}, data), do: send(pid, {:console_data, data})
   defp to_console(_state, _data), do: :ok

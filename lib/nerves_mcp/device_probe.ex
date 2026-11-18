@@ -218,7 +218,7 @@ defmodule NervesMCP.DeviceProbe do
 
   defp classify(:noise), do: {:shell, "serial responded but did not run Elixir"}
   defp classify(:down), do: {:down, "no response from device"}
-  defp classify(:busy), do: {:busy, "device busy (evaluation in flight)"}
+  defp classify(:busy), do: {:busy, "device busy (evaluation in flight or console in use)"}
   defp classify({:error, reason}), do: {:unknown, "probe error: #{inspect(reason)}"}
 
   # Don't overwrite a known mode just because the device was momentarily busy.
