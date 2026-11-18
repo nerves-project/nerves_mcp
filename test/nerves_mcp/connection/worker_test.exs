@@ -128,13 +128,16 @@ defmodule NervesMCP.Connection.WorkerTest do
     %{id: id, worker: worker} = context
     first = request(fn -> Connection.eval(id, ":first") end)
     _marker = sent_marker()
-    second = request(fn -> Connection.eval(id, ":second") end)
-    _ = :sys.get_state(worker)
+    # Sent from this process so it is sure to be queued before the link goes.
+    second = :gen_server.send_request(worker, {:eval, ":second", 15_000})
 
     send(worker, {:device_lost, :unplugged})
 
     assert {:error, "Device connection lost" <> _} = Task.await(first)
-    assert {:error, "Device connection lost" <> _} = Task.await(second)
+
+    assert {:reply, {:error, "Device connection lost" <> _}} =
+             :gen_server.receive_response(second, 1_000)
+
     assert_receive :closed
     assert {:error, "Device not connected" <> _} = Connection.eval(id, "1")
 
