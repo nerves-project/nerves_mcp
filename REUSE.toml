@@ -3,19 +3,10 @@ version = 1
 [[annotations]]
 path = [
     ".cspell.json",
-    ".gitignore",
     "mix.lock",
+    "NOTICE",
     "VERSION"
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "None"
 SPDX-License-Identifier = "CC0-1.0"
-
-[[annotations]]
-path = [
-    "CHANGELOG.md",
-    "README.md"
-]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 Lars Wikman"
-SPDX-License-Identifier = "CC-BY-4.0"

@@ -1,3 +1,8 @@
+<!--
+  SPDX-FileCopyrightText: 2026 Lars Wikman
+  SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # NervesMCP
 
 [![Hex version](https://img.shields.io/hexpm/v/nerves_mcp.svg "Hex version")](https://hex.pm/packages/nerves_mcp)
