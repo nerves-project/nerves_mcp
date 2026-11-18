@@ -13,7 +13,8 @@ Add to your dependencies:
 ```elixir
 def deps do
   [
-    {:nerves_mcp, "~> 0.1.0"}
+    # For library use, such as in tooling remove runtime: false
+    {:nerves_mcp, "~> 0.1", only: :dev, targets: :host, runtime: false}
   ]
 end
 ```
@@ -25,11 +26,11 @@ NervesMCP can be run as a Mix task or as a standalone escript. The first argumen
 ### Mix task
 
 ```bash
-# Serial — auto-detected from /dev/tty* path
+# Serial — auto-detected from leading /
 mix nerves_mcp /dev/ttyUSB0
 mix nerves_mcp /dev/ttyUSB0 --speed 9600
 
-# SSH — anything that isn't a serial path is treated as a host
+# SSH — anything that isn't a serial path is treated as a hostname
 mix nerves_mcp nerves.local
 mix nerves_mcp nerves.local --user root --ssh-port 2222
 ```
@@ -44,6 +45,31 @@ mix escript.build
 ```
 
 The escript only supports SSH. The serial driver cannot be packed into an escript, so use the Mix task for serial devices.
+
+### Use as a library
+
+An application can run one MCP server per device, each on its own port, without any `:nerves_mcp` configuration:
+
+```elixir
+{:ok, server} =
+  NervesMCP.start_server("nerves-1234.local",
+    connection: [type: :ssh, host: "nerves-1234.local", user: "root"]
+  )
+
+server.url
+#=> "http://localhost:13000/mcp"
+
+NervesMCP.servers()
+NervesMCP.stop_server("nerves-1234.local")
+```
+
+The first argument is an id of your choosing. Ports are handed out from 13000 upwards, skipping any that are taken. To keep a device on the port it had last time, remember `server.port` and put it first:
+
+```elixir
+NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_list(13000..13099)])
+```
+
+`NervesMCP.Connection` evaluates code on a running server's device directly, e.g. `NervesMCP.Connection.eval(id, "1 + 1")`.
 
 ### Options
 
@@ -95,7 +121,7 @@ mix nerves_mcp other.local     # switch to a different host entirely
 
 ### Auto-detection
 
-If the first argument starts with `/dev/tty`, `/dev/cu.`, or `/dev/serial`, it is treated as a serial device. Otherwise it is treated as an SSH host. Use `--serial` or `--ssh` to be explicit:
+If the first argument starts with `/` for typically `/dev/tty`, `/dev/cu.`, or `/dev/serial`, it is treated as a serial device. Otherwise it is treated as an SSH host. Use `--serial` or `--ssh` to be explicit:
 
 ```bash
 mix nerves_mcp --serial /dev/ttyACM0
@@ -110,38 +136,31 @@ Once running, the MCP server is available at:
 http://localhost:13000/mcp
 ```
 
-Or whatever port you specified with `--port`.
+For Claude Code:
+
+```bash
+claude mcp add --transport http nerves http://localhost:13000/mcp
+```
+
+For Codex:
+
+```bash
+codex mcp add nerves --url http://localhost:13000/mcp
+```
+
+For OpenCode:
+
+```bash
+opencode mcp add nerves --url http://localhost:13000/mcp
+```
 
 ### Security
 
 Whoever can reach the MCP port can run code on the device, and there is no authentication. The server therefore only listens on the loopback interface unless you pass `--ip`, set `config :nerves_mcp, :ip`, or give `:ip` to `NervesMCP.start_server/2`. Only do that on a network you trust. Requests from web pages are refused unless the page is served from the same machine.
 
-SSH connections do not check the device's host key, since Nerves devices get a new one with each fresh firmware.
+SSH connections do not check the device's host key, since some Nerves devices get a new one when reflashed.
 
-## Use as a library
-
-An application can run one MCP server per device, each on its own port, without any `:nerves_mcp` configuration:
-
-```elixir
-{:ok, server} =
-  NervesMCP.start_server("nerves-1234.local",
-    connection: [type: :ssh, host: "nerves-1234.local", user: "root"]
-  )
-
-server.url
-#=> "http://localhost:13000/mcp"
-
-NervesMCP.servers()
-NervesMCP.stop_server("nerves-1234.local")
-```
-
-The first argument is an id of your choosing. Ports are handed out from 13000 upwards, skipping any that are taken. To keep a device on the port it had last time, remember `server.port` and put it first:
-
-```elixir
-NervesMCP.start_server(id, connection: connection, port: [saved_port | Enum.to_list(13000..13099)])
-```
-
-`NervesMCP.Connection` evaluates code on a running server's device directly, e.g. `NervesMCP.Connection.eval(id, "1 + 1")`.
+This is intended as a development tool. If you deploy this you are deploying RCE as a service.
 
 ## MCP Tools
 
@@ -183,9 +202,10 @@ Runs a shell command and returns its output. Offered when the device answers but
 
 Runs a shell command and returns stdout, stderr and the exit code.
 
-## Interactive Console
+## Interactive Console & Serial proxying
 
-From IEx, you can open an interactive console to the device:
+From IEx or the mix task, you can open an interactive console to the device. This also means you can still use your serial console
+while offering it to the LLM:
 
 ```elixir
 iex> console()
