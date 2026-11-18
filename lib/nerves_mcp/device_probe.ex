@@ -19,7 +19,7 @@ defmodule NervesMCP.DeviceProbe do
 
   The probe is resilient: a device that returns *some* output but cannot run
   Elixir degrades to `:shell` rather than reporting failure, so the server can
-  still offer raw shell tools (see `NervesMCP.Tools.ShellEval`).
+  still offer the shell tools.
 
   `NervesMCP.Server.server/0` reads `mode/1` on every request and lists tools
   accordingly. On a mode change we broadcast `notifications/tools/list_changed`
