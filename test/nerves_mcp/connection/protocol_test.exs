@@ -68,6 +68,17 @@ defmodule NervesMCP.Connection.ProtocolTest do
       assert run_shell(Protocol.shell_output("echo hi; false", @marker)) ==
                {:done, :ok, "OUTPUT:\nhi\nRESULT:\nExit code: 1"}
     end
+
+    test "keep their quotes and line breaks" do
+      command = ~s(echo 'a b' "c"\necho "it's")
+      assert run_shell(Protocol.shell(command, @marker)) == {:done, :ok, "a b c\nit's"}
+    end
+
+    test "are answered even when they cannot be parsed" do
+      assert {:done, :ok, output} = run_shell(Protocol.shell_output("echo 'open", @marker))
+      assert output =~ "RESULT:\nExit code: "
+      refute output =~ "Exit code: 0"
+    end
   end
 
   describe "extract/4" do

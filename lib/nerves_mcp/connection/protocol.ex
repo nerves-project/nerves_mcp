@@ -79,22 +79,20 @@ defmodule NervesMCP.Connection.Protocol do
     """
   end
 
+  # One command, so the shell prints no prompt or echo between the markers.
   # The quotes keep the marker itself out of what the terminal echoes back.
   @spec shell(String.t(), String.t()) :: String.t()
   def shell(command, marker) do
-    "echo '#{marker}''_START'\n#{command}\necho '#{marker}''_END'\n"
+    "echo '#{marker}''_START'; eval #{shell_quote(command)}; echo '#{marker}''_END'\n"
   end
 
   @spec shell_output(String.t(), String.t()) :: String.t()
   def shell_output(command, marker) do
-    "echo '#{marker}''_START'\n" <>
-      "echo 'OUTPUT:'\n" <>
-      "#{command} 2>&1\n" <>
-      "__mcp_rc=$?\n" <>
-      "echo 'RESULT:'\n" <>
-      "echo \"Exit code: $__mcp_rc\"\n" <>
-      "echo '#{marker}''_END'\n"
+    "echo '#{marker}''_START'; echo 'OUTPUT:'; eval #{shell_quote(command)} 2>&1; " <>
+      "__mcp_rc=$?; echo 'RESULT:'; echo \"Exit code: $__mcp_rc\"; echo '#{marker}''_END'\n"
   end
+
+  defp shell_quote(command), do: "'" <> String.replace(command, "'", "'\\''") <> "'"
 
   @doc """
   Looks for a finished answer in what has arrived so far.
