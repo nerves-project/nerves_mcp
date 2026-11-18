@@ -19,7 +19,6 @@
     "_build",
     "assets",
     "deps",
-    "LICENSE.md",
     "LICENSES",
     "mix.exs",
     "priv",

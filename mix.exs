@@ -58,7 +58,6 @@ defmodule NervesMCP.MixProject do
         ".formatter.exs",
         "mix.exs",
         "README.md",
-        "LICENSE.md",
         "CHANGELOG.md",
         "REUSE.toml",
         "VERSION"
