@@ -20,44 +20,55 @@ defmodule NervesMCP.Connection.SSH do
     "ServerAliveInterval=60"
   ]
 
+  # Kills the process named in $0 once stdin closes, which it does when the
+  # port is closed and when the VM goes away without closing anything.
+  @watch ~s(cat >/dev/null; kill "$0" 2>/dev/null)
+
   @impl NervesMCP.Connection.Transport
   def open(config) do
     with {:ok, executable, args, env} <- command(config) do
-      {:ok,
-       Port.open({:spawn_executable, executable}, [:binary, :exit_status, args: args, env: env])}
+      port =
+        Port.open({:spawn_executable, executable}, [:binary, :exit_status, args: args, env: env])
+
+      {:ok, {port, watch(port)}}
     end
   rescue
     error -> {:error, error}
   end
 
+  # An interactive ssh outlives its stdin being closed, so it has to be killed.
+  defp watch(port) do
+    with {:os_pid, pid} <- Port.info(port, :os_pid),
+         sh when is_binary(sh) <- System.find_executable("sh") do
+      Port.open({:spawn_executable, sh}, args: ["-c", @watch, Integer.to_string(pid)])
+    else
+      _unavailable -> nil
+    end
+  end
+
   @impl NervesMCP.Connection.Transport
-  def write(port, data) do
+  def write({port, _watcher}, data) do
     Port.command(port, data)
     :ok
   rescue
     ArgumentError -> {:error, :closed}
   end
 
-  # Closing the port only closes ssh's stdin, which an interactive session
-  # outlives, so the process itself is told to stop as well.
   @impl NervesMCP.Connection.Transport
-  def close(port) do
-    os_pid = Port.info(port, :os_pid)
-    if Port.info(port), do: Port.close(port)
-
-    with {:os_pid, pid} <- os_pid, kill when is_binary(kill) <- System.find_executable("kill") do
-      System.cmd(kill, [Integer.to_string(pid)], stderr_to_stdout: true)
-    end
-
+  def close({port, watcher}) do
+    for open <- [port, watcher], is_port(open) and Port.info(open) != nil, do: Port.close(open)
     :ok
   rescue
     ArgumentError -> :ok
   end
 
   @impl NervesMCP.Connection.Transport
-  def handle_message(port, {port, {:data, data}}), do: {:data, data}
-  def handle_message(port, {port, {:exit_status, status}}), do: {:closed, {:exit_status, status}}
-  def handle_message(_port, _message), do: :ignore
+  def handle_message({port, _watcher}, {port, {:data, data}}), do: {:data, data}
+
+  def handle_message({port, _watcher}, {port, {:exit_status, status}}),
+    do: {:closed, {:exit_status, status}}
+
+  def handle_message(_handle, _message), do: :ignore
 
   @impl NervesMCP.Connection.Transport
   def frame(text), do: text <> "\r\n"
